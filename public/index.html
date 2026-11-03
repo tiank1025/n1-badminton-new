@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N1 Badminton — Event Info | 活动详情</title>
+  <link rel="stylesheet" href="/common.css">
+  <style>
+    /* index.html — bilingual (EN / 中文) landing + event info page.
+       Extends common.css cards, buttons and header. */
+
+    /* Badminton court photo background, softened so the content stays readable */
+    body {
+      background-color: #eef5f0;
+      background-image:
+        linear-gradient(rgba(246,250,247,0.82), rgba(246,250,247,0.93)),
+        url('/images/badminton-bg.jpg');
+      background-size: cover;
+      background-position: center top;
+      background-attachment: fixed;
+      background-repeat: no-repeat;
+    }
+    @media (max-width: 640px) {
+      body { background-attachment: scroll; }
+    }
+    .page-head {
+      position: relative; overflow: hidden;
+      background: linear-gradient(135deg, #245c43 0%, #3f7d5d 55%, #6f9f83 100%);
+      color: #fff;
+      border-radius: var(--r-card);
+      padding: 28px 24px;
+      margin-bottom: 14px;
+      box-shadow: var(--shadow-lg);
+    }
+    /* Court-line texture + shuttlecock watermark for a badminton feel */
+    .page-head::before {
+      content: ''; position: absolute; inset: -60px;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.12) 1.5px, transparent 1.5px),
+        linear-gradient(90deg, rgba(255,255,255,0.12) 1.5px, transparent 1.5px);
+      background-size: 48px 48px;
+      transform: rotate(-9deg);
+      pointer-events: none;
+    }
+    .page-head > h2, .page-head > p, .page-head > .cta-row { position: relative; z-index: 1; }
+    .page-head-shuttle {
+      position: absolute; right: 16px; top: 18px;
+      width: 84px; height: 84px; opacity: 0.85; z-index: 0;
+      filter: drop-shadow(0 8px 16px rgba(0,0,0,0.16));
+      animation: pt-float 5s ease-in-out infinite;
+    }
+    .page-head h2 { font-size: 24px; font-weight: 900; letter-spacing: -0.5px; color:#fff; margin-bottom: 6px; }
+    .page-head p { font-size: 14px; opacity: 0.9; }
+
+    /* Sticky quick-jump chips */
+    .toc {
+      position: sticky; top: 64px; z-index: 50;
+      display: flex; gap: 8px; flex-wrap: wrap;
+      padding: 10px 0; margin-bottom: 6px;
+    }
+    .toc a {
+      font-size: 12px; font-weight: 700; text-decoration: none;
+      color: var(--mg-700); background: var(--card);
+      border: 1.5px solid var(--mg-200); border-radius: 999px;
+      padding: 6px 13px; box-shadow: var(--shadow-sm);
+      transition: all var(--t-fast);
+    }
+    .toc a:hover { background: var(--mg-100); border-color: var(--mg-400); }
+
+    section.card { scroll-margin-top: 110px; }
+    .sec-title {
+      font-size: 17px; font-weight: 900; color: var(--mg-800);
+      margin-bottom: 12px; display: flex; align-items: center; gap: 8px;
+    }
+    .sec-title .bar { width: 4px; height: 18px; border-radius: 2px; background: var(--accent-grad); }
+    h3.sub-title { font-size: 14.5px; font-weight: 800; color: var(--mp-700); margin: 14px 0 6px; }
+    p { font-size: 14px; line-height: 1.65; color: var(--n-700); }
+    p.zh { font-size: 13px; color: var(--n-500); margin-top: 4px; }
+    p + h3.sub-title, ul + h3.sub-title { margin-top: 18px; }
+
+    ul.info-list { list-style: none; margin: 8px 0; }
+    ul.info-list li {
+      position: relative; padding-left: 22px; margin-bottom: 8px;
+      font-size: 14px; line-height: 1.6; color: var(--n-700);
+    }
+    ul.info-list li::before {
+      content: ''; position: absolute; left: 4px; top: 9px;
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--mg-400);
+    }
+    ul.info-list li.zh { font-size: 13px; color: var(--n-500); margin-top: -4px; padding-left: 22px; }
+    ul.info-list li.zh::before { background: var(--mp-300); }
+
+    /* Callout boxes */
+    .callout {
+      border-radius: var(--r-input); padding: 12px 14px; margin: 10px 0;
+      font-size: 13.5px; line-height: 1.6;
+    }
+    .callout .t { font-weight: 800; display: block; margin-bottom: 4px; }
+    .callout.note   { background: var(--mp-50);  border: 1.5px solid var(--mp-200); color: var(--mp-800); }
+    .callout.new    { background: var(--mg-50);  border: 1.5px solid var(--mg-300); color: var(--mg-800); }
+    .callout.warn   { background: #fff7ed;       border: 1.5px solid #fed7aa; color: #9a3412; }
+    .callout.price  { background: linear-gradient(135deg, var(--mg-50), var(--mp-50)); border: 1.5px solid var(--mg-200); }
+    .callout .zh { font-size: 12.5px; opacity: 0.85; }
+
+    .bank-box {
+      background: var(--n-100); border-radius: var(--r-input);
+      padding: 12px 14px; margin-top: 8px; font-size: 13.5px; line-height: 1.9;
+    }
+    .bank-box code {
+      background: var(--card); border: 1px solid var(--border);
+      border-radius: 6px; padding: 1px 7px; font-weight: 700; color: var(--mg-800);
+    }
+
+    .cta-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .ig-link { font-weight: 800; color: var(--mp-600); }
+
+    /* ── Play & Train announcement module (green + badminton motifs) ── */
+    .pt-module { padding: 0; overflow: hidden; }
+    .pt-hero {
+      position: relative; overflow: hidden;
+      padding: 26px 22px 22px;
+      background: linear-gradient(135deg, #245c43 0%, #3f7d5d 45%, #75a98b 100%);
+      color: #fff;
+    }
+    /* Faint badminton court lines behind the hero copy */
+    .pt-hero::before {
+      content: ''; position: absolute; inset: -60px;
+      background-image:
+        linear-gradient(rgba(255,255,255,0.16) 1.5px, transparent 1.5px),
+        linear-gradient(90deg, rgba(255,255,255,0.16) 1.5px, transparent 1.5px);
+      background-size: 46px 46px;
+      transform: rotate(-10deg);
+      opacity: 0.7; pointer-events: none;
+    }
+    .pt-hero::after {
+      content: ''; position: absolute; right: -70px; bottom: -110px;
+      width: 260px; height: 260px; border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,255,255,0.22), transparent 68%);
+      pointer-events: none;
+    }
+    .pt-hero > * { position: relative; z-index: 1; }
+    .pt-hero-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 11px; font-weight: 800; letter-spacing: 0.7px; text-transform: uppercase;
+      color: #eaf6ee; background: rgba(255,255,255,0.14);
+      border: 1px solid rgba(255,255,255,0.35);
+      border-radius: 999px; padding: 5px 11px;
+    }
+    .pt-hero-title {
+      font-size: clamp(30px, 7vw, 44px); font-weight: 900;
+      letter-spacing: -1px; line-height: 1.05; margin: 14px 0 6px;
+      padding-right: 56px;
+    }
+    .pt-hero-title .arrow { color: #c8f0d8; margin: 0 4px; }
+    .pt-hero-sub { font-size: 14px; font-weight: 700; opacity: 0.95; }
+    .pt-hero-tag {
+      display: inline-block; margin-top: 12px;
+      font-size: 12.5px; font-weight: 600;
+      background: rgba(255,255,255,0.16); border-radius: 10px;
+      padding: 7px 11px;
+    }
+    /* Shuttlecock drawn with SVG — floats beside the hero title */
+    .pt-shuttle {
+      position: absolute; top: 20px; right: 18px;
+      width: 62px; height: 62px; z-index: 2;
+      filter: drop-shadow(0 6px 14px rgba(0,0,0,0.18));
+      animation: pt-float 4.5s ease-in-out infinite;
+    }
+    @keyframes pt-float {
+      0%, 100% { transform: translateY(0) rotate(-8deg); }
+      50%      { transform: translateY(-9px) rotate(8deg); }
+    }
+    .pt-body { padding: 18px 20px 22px; }
+    .pt-poster {
+      border-radius: var(--r-card); overflow: hidden;
+      border: 3px solid #cfead9; box-shadow: 0 10px 26px rgba(36,92,67,0.18);
+      background: var(--n-100); margin-bottom: 16px;
+    }
+    .pt-poster img { width: 100%; height: auto; display: block; }
+    .pt-chips { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+    .pt-chips span {
+      font-size: 12px; font-weight: 700; color: #245c43;
+      background: #eef8f2; border: 1px solid #bfe0cd;
+      border-radius: 999px; padding: 5px 11px;
+    }
+    /* Badminton-inspired bullet markers (diamond = shuttle skirt) */
+    .pt-module ul.info-list li::before {
+      width: 7px; height: 7px; border-radius: 2px;
+      background: #3f7d5d; transform: rotate(45deg);
+    }
+    .pt-module ul.info-list li.zh::before { background: #93c0a8; }
+    .pt-module h3.sub-title { color: #2f6b4f; }
+    .pt-module .callout.price {
+      background: linear-gradient(135deg, #eef8f2, #f4fbf7);
+      border: 1.5px solid #bfe0cd; position: relative; overflow: hidden;
+    }
+    .pt-module .callout.price .t { color: #245c43; font-size: 15px; }
+    .pt-module .callout.price::after {
+      content: '🏸'; position: absolute; right: 10px; bottom: 4px;
+      font-size: 28px; opacity: 0.45;
+    }
+    .pt-hashtags { font-size: 11.5px; color: var(--n-400); margin-top: 12px; line-height: 1.7; }
+    @media (max-width: 440px) {
+      .pt-shuttle { width: 46px; height: 46px; top: 14px; right: 12px; }
+      .pt-hero { padding: 20px 16px 18px; }
+      .pt-body { padding: 14px 14px 18px; }
+      .page-head-shuttle { width: 58px; height: 58px; top: 12px; right: 10px; opacity: 0.5; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>🏸 N1 Badminton</h1>
+      <div class="user-info" id="user-info">Event Info · 活动详情</div>
+    </div>
+    <nav id="main-nav">
+      <a href="/login" id="nav-login">🔑 Login / Register</a>
+    </nav>
+  </header>
+
+  <main>
+    <div class="page-head">
+      <svg class="page-head-shuttle" viewBox="0 0 64 64" aria-hidden="true">
+        <path d="M32 40 L14 12 Q32 5 50 12 Z" fill="#e8f6ee" stroke="#245c43" stroke-width="2.4" stroke-linejoin="round"/>
+        <line x1="32" y1="40" x2="23" y2="13" stroke="#3f7d5d" stroke-width="1.6"/>
+        <line x1="32" y1="40" x2="32" y2="9"  stroke="#3f7d5d" stroke-width="1.6"/>
+        <line x1="32" y1="40" x2="41" y2="13" stroke="#3f7d5d" stroke-width="1.6"/>
+        <ellipse cx="32" cy="46" rx="9" ry="7" fill="#ffffff" stroke="#245c43" stroke-width="2.4"/>
+      </svg>
+      <h2>Welcome to N1 Badminton 👋</h2>
+      <p>Everything you need to know before signing up · 报名前你需要知道的一切</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/login" id="cta-top">📝 Login / Register · 登录 / 注册</a>
+      </div>
+    </div>
+
+    <nav class="toc">
+      <a href="#new">🆕 What's New</a>
+      <a href="#about">🏸 About</a>
+      <a href="#waitlist">⏳ Waiting List</a>
+      <a href="#playtrain">💪 Play &amp; Train</a>
+      <a href="#faq">❓ FAQs</a>
+      <a href="#travel">🚗 Travel</a>
+      <a href="#entry">🚪 Entry</a>
+      <a href="#cancellation">↩️ Cancellation</a>
+      <a href="#contact">✉️ Contact</a>
+    </nav>
+
+    <!-- What's New -->
+    <section class="card" id="new">
+      <div class="sec-title"><span class="bar"></span>What's New? <span style="font-weight:600;color:var(--n-400)">| 最新动态</span></div>
+      <div class="callout new">
+        <span class="t">NEW! PLAY &amp; TRAIN | 全新活动 PLAY &amp; TRAIN</span>
+        See the <a href="#playtrain">Play &amp; Train section</a> below for more details!
+        <div class="zh">请查看下方 <a href="#playtrain">Play &amp; Train 章节</a>，了解更多详情！</div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section class="card" id="about">
+      <div class="sec-title"><span class="bar"></span>About N1 Badminton <span style="font-weight:600;color:var(--n-400)">| 关于 N1 羽球</span></div>
+      <h3 class="sub-title">PLAY STARTS HERE | 开启羽球之路</h3>
+      <p>N1 Badminton welcomes players of all skill levels with structured socials so players can enjoy quality games matched to their ability! Whether you are new to badminton or looking to improve your game, we have something for you.</p>
+      <p class="zh">N1 羽毛球欢迎所有水平的球友参与，每位球员都能享受适合自己水平的精彩对打。不论你是新手还是想提升球技的老手，我们都欢迎你加入！</p>
+      <div class="callout note">
+        <span class="t">NOTE | 注意：</span>
+        Players are welcome to attend any session, regardless of their grade. However, please be mindful that attending a session outside your playing level means the standard of play may not match your usual intensity — either more relaxed or more competitive than you're used to.
+        <div class="zh">球员可自由参加任何场次，不受等级限制。但请注意，若想参加与你等级不符的场次，对局强度可能与平时不同——可能更轻松，也可能更具竞争性。</div>
+      </div>
+    </section>
+
+    <!-- Waiting List -->
+    <section class="card" id="waitlist">
+      <div class="sec-title"><span class="bar"></span>Waiting List <span style="font-weight:600;color:var(--n-400)">| 等候名单</span></div>
+      <ul class="info-list">
+        <li>You can still sign up even if the event is full! Once signed up, you will be added to our online wait list.</li>
+        <li class="zh">即使活动已满，你仍然可以报名！报名后，你将被加入我们的线上等候名单。</li>
+        <li>An organiser will contact you (usually via SMS) if a spot becomes available.</li>
+        <li class="zh">如有名额空出，活动组织者会联系你（通常通过短信）。</li>
+        <li>Please confirm your availability as soon as possible if you have received a message from the organiser.</li>
+        <li class="zh">收到组织者的消息后，请尽快确认你的可参加情况。</li>
+      </ul>
+      <p style="margin-top:10px;">Follow us on Instagram · 关注我们：<a class="ig-link" href="https://instagram.com/n1.badminton" target="_blank" rel="noopener">@n1.badminton</a></p>
+    </section>
+
+    <!-- Play & Train (event notice) -->
+    <section class="card pt-module" id="playtrain">
+      <div class="pt-hero">
+        <svg class="pt-shuttle" viewBox="0 0 64 64" aria-hidden="true">
+          <path d="M32 40 L14 12 Q32 5 50 12 Z" fill="#e8f6ee" stroke="#245c43" stroke-width="2.4" stroke-linejoin="round"/>
+          <line x1="32" y1="40" x2="23" y2="13" stroke="#3f7d5d" stroke-width="1.6"/>
+          <line x1="32" y1="40" x2="32" y2="9"  stroke="#3f7d5d" stroke-width="1.6"/>
+          <line x1="32" y1="40" x2="41" y2="13" stroke="#3f7d5d" stroke-width="1.6"/>
+          <ellipse cx="32" cy="46" rx="9" ry="7" fill="#ffffff" stroke="#245c43" stroke-width="2.4"/>
+        </svg>
+        <div class="pt-hero-badge">📣 Event Notice · 活动通知</div>
+        <div class="pt-hero-title">PLAY<span class="arrow">⇄</span>TRAIN</div>
+        <div class="pt-hero-sub">Training + Social · 训练与玩耍</div>
+        <div class="pt-hero-tag">30-minute personalised training with @ag_badminton</div>
+      </div>
+
+      <div class="pt-body">
+      <div class="pt-poster">
+        <img src="/images/play-train.jpg" alt="PLAY ⇄ TRAIN — personalised 30-minute training with AG Badminton during the N1 social">
+      </div>
+
+      <p>Take the opportunity to play in our social and receive a 30-minute personalised training session with @ag_badminton.</p>
+      <p class="zh">训练与玩耍！🏸 在我们的社交活动获得由 @ag_badminton 提供的 30 分钟个性化训练课程。</p>
+      <div class="pt-chips">
+        <span>30 min personalised training</span>
+        <span>Incl. 2hr social</span>
+        <span>From 7pm · first come, first serve</span>
+      </div>
+
+      <h3 class="sub-title">💡 How it works | 活动说明</h3>
+      <ul class="info-list">
+        <li>Training will run in shared 30min blocks throughout the social*</li>
+        <li class="zh">训练将在社交活动期间以“共享 30 分钟时段”形式进行。</li>
+        <li>Train together, learn new skills, and build your game through a weekly focus.</li>
+        <li class="zh">一起训练，掌握新技巧，以每周专项训练不断提升你的球技。</li>
+        <li>You'll still be able to rejoin and enjoy the rest of the social once your block finishes.</li>
+        <li class="zh">你的训练时段结束后，仍可重新加入并继续参与后续的社交活动。</li>
+      </ul>
+
+      <h3 class="sub-title">❗ Important notes | 重要提示</h3>
+      <ul class="info-list">
+        <li>Blocks are allocated on a first come, first serve basis starting from 7pm.</li>
+        <li class="zh">时段按“先到先得”原则从晚上 7 点开始分配。</li>
+        <li>Pre-payments are required.</li>
+        <li class="zh">需提前支付费用。</li>
+        <li>More spots will open up gradually depending on demand.</li>
+        <li class="zh">根据需求，将逐步开放更多名额。</li>
+      </ul>
+
+      <h3 class="sub-title">💰 Price | 费用</h3>
+      <div class="callout price">
+        <span class="t">$45 for a block of training incl. 2hr social</span>
+        <div class="zh">$45（社交活动 + 半小时训练）</div>
+      </div>
+      <p>Whether you're looking to improve your serve, footwork, stroke technique, positioning, or another specific aspect of your game, AG will work with you to identify an area to focus on and provide the guidance necessary to get you to your goal.</p>
+      <p class="zh">无论你想提升发球、步伐、击球技术、站位，还是其他特定方面的技术，AG 都会与你一起确定重点改进方向，并提供实现目标所需的指导。</p>
+      <p style="margin-top:8px; font-weight:700;">Dare to try and keep improving 💪</p>
+      <p class="zh" style="font-weight:600;">勇敢尝试，持续进步 💪</p>
+      <p class="pt-hashtags">#badmintontraining #羽毛球训练 #n1badminton #n1羽毛球 #brisbane #布里斯班</p>
+      </div>
+    </section>
+
+    <!-- FAQs -->
+    <section class="card" id="faq">
+      <div class="sec-title"><span class="bar"></span>FAQs <span style="font-weight:600;color:var(--n-400)">| 常见问题</span></div>
+
+      <h3 class="sub-title">FEE | 费用</h3>
+      <ul class="info-list">
+        <li>$19 per player</li>
+        <li class="zh">$19 / 人</li>
+      </ul>
+
+      <h3 class="sub-title">PAYMENT | 支付 — Bank Transfer | 银行转账</h3>
+      <p>If paying by Bank Transfer, please pay to the following account:</p>
+      <p class="zh">如选择银行转账，请汇款至以下账户：</p>
+      <div class="bank-box">
+        Name · 账户名称：<code>N1 Badminton</code><br>
+        Bank · 银行：<code>NAB</code><br>
+        BSB：<code>084-961</code><br>
+        Account number · 账号：<code>271-605-706</code><br>
+        Reference · 汇款备注：Your name + date of session · 您的姓名 + 课程日期
+      </div>
+
+      <h3 class="sub-title">WHAT TO BRING | 携带物品</h3>
+      <ul class="info-list">
+        <li>Proper non-marking court shoes</li>
+        <li class="zh">适合室内运动的防滑球鞋（不留痕球鞋）</li>
+        <li>A racket, towel, water bottle</li>
+        <li class="zh">羽毛球拍、毛巾、水瓶</li>
+      </ul>
+    </section>
+
+    <!-- Travel -->
+    <section class="card" id="travel">
+      <div class="sec-title"><span class="bar"></span>Travel Instructions <span style="font-weight:600;color:var(--n-400)">| 交通指南</span></div>
+
+      <h3 class="sub-title">ARRIVING BY CAR | 驾车到达</h3>
+      <p>Parking is available on the street side where permitted, as well as within Vision Badminton Centre's parking grounds.</p>
+      <p class="zh">可在允许停车的路边停车，也可停在 Vision Badminton Centre（VBC）场地内的停车场。</p>
+      <div class="callout warn">
+        <span class="t">IMPORTANT NOTE | 重要提示</span>
+        We strongly recommend parking on VBC grounds on event days at The Gabba stadium to avoid unwanted parking fines by the council.
+        <div class="zh">活动当天强烈建议在 VBC 场地内停车（位于 The Gabba 体育场附近），以避免因市政管理停车而产生罚款。</div>
+      </div>
+      <ul class="info-list">
+        <li>Please use the entrance closer to Deshon Street / Main Ave to enter the complex.</li>
+        <li class="zh">请使用靠近 Deshon Street / Main Ave 的入口进入场地。</li>
+        <li>Please do not use the car spaces allocated to the Brisbane City Indoor Sports complex as the lots are not shared.</li>
+        <li class="zh">请勿使用 Brisbane City Indoor Sports 设施的专用停车位，这些车位不对外共享。</li>
+      </ul>
+
+      <h3 class="sub-title">ARRIVING BY PUBLIC TRANSPORT | 公共交通到达</h3>
+      <ul class="info-list">
+        <li>12 min walk to/from Langlands Park Bus Station</li>
+        <li class="zh">步行约 12 分钟至 Langlands Park 公交车站</li>
+        <li>13 min walk to/from Coorparoo Train Station</li>
+        <li class="zh">步行约 13 分钟至 Coorparoo 火车站</li>
+      </ul>
+    </section>
+
+    <!-- Entry -->
+    <section class="card" id="entry">
+      <div class="sec-title"><span class="bar"></span>Entry Guide <span style="font-weight:600;color:var(--n-400)">| 入场指南</span></div>
+      <p>There are two ways to enter the hall:</p>
+      <p class="zh">进入大楼有两种方式：</p>
+      <ul class="info-list">
+        <li>Enter via the automatic doors at the front of the building.</li>
+        <li class="zh">从大楼正门的自动门进入。</li>
+        <li>Enter via the side door between the parked cars. If the door is locked, please press the doorbell button.</li>
+        <li class="zh">从停车场之间的侧门进入。如果门锁着，请按门铃。</li>
+      </ul>
+    </section>
+
+    <!-- Toilets -->
+    <section class="card" id="toilets">
+      <div class="sec-title"><span class="bar"></span>Toilets <span style="font-weight:600;color:var(--n-400)">| 洗手间位置</span></div>
+      <p>A unisex PWD/toilet and separate men's bathrooms are available. Women's toilet may or may not be accessible due to ongoing construction in the front area — please use the unisex toilet during this time if there is no current access.</p>
+      <p class="zh">提供无性别无障碍厕所（PWD）及独立男士厕所。受前方施工影响，女士厕所可能无法使用，如遇此情况，请在此期间使用无性别厕所。</p>
+    </section>
+
+    <!-- Cancellation -->
+    <section class="card" id="cancellation">
+      <div class="sec-title"><span class="bar"></span>Cancellation Policy <span style="font-weight:600;color:var(--n-400)">| 取消政策</span></div>
+      <ul class="info-list">
+        <li>Cancellations made 24hrs before the session will receive a full refund or credit for a future session.</li>
+        <li class="zh">若在活动开始前 24 小时取消，可获得全额退款或抵扣未来活动。</li>
+        <li>Cancellations within 24hrs of the session are non-refundable, unless a replacement player is found.</li>
+        <li class="zh">若在活动开始前 24 小时内取消，无法退款，除非找到替代球员。</li>
+        <li>No-shows without notice will incur the full casual rate. This may be waived with an appropriate reason provided; however, all refunds remain at the discretion of the organising committee.</li>
+        <li class="zh">未经通知未到者，将收取全额临时活动费用。若提供合理理由，可酌情豁免，但退款与否由组织委员会决定。</li>
+      </ul>
+    </section>
+
+    <!-- Disclaimers -->
+    <section class="card" id="disclaimer">
+      <div class="sec-title"><span class="bar"></span>Disclaimers <span style="font-weight:600;color:var(--n-400)">| 免责声明</span></div>
+      <p>By joining this session, players acknowledge they are participating at their own risk. The organisers are not liable for any injury, loss or damage sustained during the event. Please play responsibly and be respectful to all participants.</p>
+      <p class="zh">参加本次活动即表示球员自行承担风险。组织方对活动期间发生的任何伤害、损失或财产损害不承担责任。请合理参加，并尊重所有参与者。</p>
+    </section>
+
+    <!-- Contact -->
+    <section class="card" id="contact">
+      <div class="sec-title"><span class="bar"></span>Contact Us <span style="font-weight:600;color:var(--n-400)">| 联系我们</span></div>
+      <p>Please contact us via our social media or email us at <a class="ig-link" href="mailto:teamn1badm@gmail.com">teamn1badm@gmail.com</a>. We'll endeavour to get back to you ASAP.</p>
+      <p class="zh">请通过我们的社交媒体与我们联系，或发送邮件至 <a href="mailto:teamn1badm@gmail.com">teamn1badm@gmail.com</a>。我们会尽快回复您。</p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href="/login" id="cta-bottom">📝 Login / Register · 登录 / 注册</a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Public landing page — never force a redirect. The CTAs simply point each
+    // visitor to the right next step based on their current session:
+    //   logged out → /login        (login or create an account)
+    //   regular user → /events.html (browse & register)
+    //   admin → /dashboard
+    fetch('/api/auth/me').then(r => r.json()).then(u => {
+      const nav = document.getElementById('main-nav');
+      const info = document.getElementById('user-info');
+      const setCta = (el, href, label) => { if (el) { el.href = href; el.textContent = label; } };
+
+      if (!u) {
+        // Logged-out defaults are already rendered in the HTML.
+        return;
+      }
+
+      info.textContent = `Hi, ${u.display_name} · Event Info`;
+      if (u.is_admin) {
+        nav.innerHTML = '<a href="/dashboard">📊 Dashboard</a><a href="/board">📊 Live Board</a><a href="#" id="nav-logout">🚪 Logout</a>';
+        setCta(document.getElementById('cta-top'),    '/dashboard', '📊 Admin Dashboard · 管理面板');
+        setCta(document.getElementById('cta-bottom'), '/dashboard', '📊 Admin Dashboard · 管理面板');
+      } else {
+        nav.innerHTML = '<a href="/events.html">📅 Events</a><a href="/board">📊 Live Board</a><a href="#" id="nav-logout">🚪 Logout</a>';
+        setCta(document.getElementById('cta-top'),    '/events.html', '📝 View Events · 查看活动');
+        setCta(document.getElementById('cta-bottom'), '/events.html', '📝 View Events · 查看活动');
+      }
+      const logout = document.getElementById('nav-logout');
+      if (logout) logout.addEventListener('click', async (e) => {
+        e.preventDefault();
+        await fetch('/api/auth/logout', { method: 'POST' });
+        window.location.reload();
+      });
+    }).catch(() => { /* logged out — keep default login CTAs */ });
+  </script>
+</body>
+</html>

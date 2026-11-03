@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N1 Badminton — Events</title>
+  <link rel="stylesheet" href="/common.css">
+  <style>
+    /* Page-specific overrides — extends common.css */
+    main { max-width: 600px; }
+
+    /* Registration type selector (page-specific component) */
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 12px 0; }
+    .type-btn { border: 2px solid var(--n-200); background: white; border-radius: var(--r-input); padding: 16px 12px; text-align: center; cursor: pointer; font-family: inherit; transition: all var(--t-fast); }
+    .type-btn .icon { font-size: 24px; }
+    .type-btn .label { font-size: 13px; font-weight: 700; margin-top: 4px; color: var(--n-600); }
+    .type-btn.sel { border-color: var(--mg-500); background: var(--mg-50); }
+    .type-btn.sel .label { color: var(--mg-700); }
+
+    /* Dimmed (non-interactive) button state */
+    .btn.dim { background: var(--n-100); color: var(--n-400); cursor: default; }
+
+    /* Error / success messaging */
+    .error { color: #dc2626; font-size: 12px; font-weight: 600; margin-top: 8px; text-align: center; }
+    .success { text-align: center; padding: 20px; }
+    .success .icon { font-size: 40px; }
+    .success h3 { font-size: 16px; font-weight: 800; margin: 8px 0 4px; }
+    .success p { font-size: 13px; color: var(--n-500); }
+
+    /* Info banner linking to the full bilingual event-info page */
+    .info-banner {
+      display: flex; align-items: center; gap: 12px;
+      text-decoration: none; color: var(--n-700);
+      border: 1.5px solid var(--mg-300);
+      background: linear-gradient(135deg, var(--mg-50), var(--mp-50));
+    }
+    .info-banner:hover { border-color: var(--mg-500); }
+    .info-banner-icon { font-size: 22px; }
+    .info-banner > span:nth-child(2) { display: flex; flex-direction: column; gap: 2px; flex: 1; font-size: 13px; }
+    .info-banner-zh { font-size: 12px; color: var(--n-500); }
+    .info-banner-arrow { font-size: 18px; font-weight: 900; color: var(--mg-600); }
+
+    /* Info row for registration summary */
+    .info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--n-100); font-size: 13px; }
+    .info-row .label { color: var(--n-500); }
+    .info-row .val { font-weight: 600; }
+
+    /* Spot counter on event cards */
+    .spots-line {
+      display: inline-block; margin-top: 6px;
+      font-size: 12px; font-weight: 700; color: var(--mg-700);
+      background: var(--mg-50); border: 1px solid var(--mg-300);
+      border-radius: 999px; padding: 3px 10px;
+    }
+    .spots-line.full { color: #b91c1c; background: #fef2f2; border-color: #fca5a5; }
+
+    /* Cancellation window (24 hours before the event) */
+    .cancel-policy { font-size: 12px; color: var(--n-500); line-height: 1.55; margin-top: 8px; }
+    .cancel-policy strong { color: var(--n-700); }
+    .cancel-locked {
+      border: 1.5px solid #fca5a5; background: #fef2f2; color: #b91c1c;
+      border-radius: var(--r-input); padding: 12px;
+      font-size: 12px; font-weight: 600; line-height: 1.55; text-align: left;
+    }
+
+    /* ── Payment reminder + payment panel ── */
+    .pay-reminder { border: 1.5px solid #fca5a5; background: #fef2f2; }
+    .pr-head { font-size: 15px; font-weight: 900; color: #b91c1c; }
+    .pr-sub { font-size: 12px; color: var(--n-600); margin-top: 4px; }
+    .pr-row {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px;
+      padding: 8px 0; border-top: 1px dashed #fecaca; cursor: pointer;
+    }
+    .pr-row:hover strong { color: var(--mg-700); }
+    .pr-meta { font-size: 11px; color: var(--n-500); }
+    .pr-right { text-align: right; white-space: nowrap; font-weight: 700; font-size: 13px; }
+
+    .pay-panel {
+      margin-top: 12px; padding: 12px; text-align: left;
+      border: 1.5px solid var(--mg-300); background: var(--mg-50);
+      border-radius: var(--r-input);
+    }
+    .pay-panel.due { border-color: #fca5a5; background: #fef2f2; }
+    .pay-title { font-size: 13px; font-weight: 800; color: var(--n-700); display: flex; justify-content: space-between; gap: 8px; }
+    .pay-amount { font-size: 22px; font-weight: 900; color: var(--mg-800); margin: 4px 0; }
+    .pay-deadline { font-size: 12px; color: #b91c1c; font-weight: 600; }
+    .bank-mini {
+      font-size: 11px; line-height: 1.7; background: white;
+      border: 1px dashed var(--n-200); border-radius: 10px; padding: 10px; margin: 8px 0;
+    }
+    .bank-mini code { font-weight: 700; color: var(--n-700); }
+    .pay-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 800; text-transform: uppercase; white-space: nowrap;
+    }
+    .pay-paid      { background: #dcfce7; color: #15803d; }
+    .pay-unpaid    { background: #fee2e2; color: #b91c1c; }
+    .pay-submitted { background: #fef3c7; color: #b45309; }
+    .pay-waived    { background: var(--n-100); color: var(--n-500); }
+    /* Receipt upload from the phone's photo album */
+    .upload-block { margin-top: 12px; }
+    .upload-title { font-size: 12px; font-weight: 700; color: var(--n-600); }
+    label.btn { cursor: pointer; }
+    .upload-preview { margin-top: 8px; }
+    .upload-preview img {
+      width: 100%; max-height: 220px; object-fit: contain;
+      display: block; background: white;
+      border: 1px solid var(--n-200); border-radius: 10px;
+    }
+    .upload-file-name { font-size: 11px; color: var(--n-500); margin-top: 6px; word-break: break-all; }
+    .pay-note { width: 100%; padding: 8px 10px; border: 1.5px solid var(--n-200); border-radius: var(--r-input); font-size: 12px; margin-bottom: 8px; font-family: inherit; }
+    .pay-fee-line { font-size: 11px; color: var(--mg-700); font-weight: 700; margin-top: 4px; }
+    .status-ok { color: #15803d; font-weight: 800; }
+    .status-wait { color: #b45309; font-weight: 700; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <h1>🏸 N1 Badminton</h1>
+      <div class="user-info" id="user-info"></div>
+    </div>
+    <nav>
+      <a href="/">ℹ️ Info · 详情</a>
+      <a href="/board" id="board-link">📊 Live Board</a>
+      <a href="#" id="logout">Logout</a>
+    </nav>
+  </header>
+
+  <main>
+    <a href="/" class="card info-banner" id="info-banner">
+      <span class="info-banner-icon">ℹ️</span>
+      <span>
+        <strong>New to N1? Read the event info — fees, Play &amp; Train, parking &amp; FAQs.</strong>
+        <span class="info-banner-zh">第一次参加？查看活动详情：费用、训练+社交、停车与常见问题。</span>
+      </span>
+      <span class="info-banner-arrow">→</span>
+    </a>
+    <div id="pay-reminder"></div>
+    <div id="events-list"></div>
+    <div id="reg-view" class="hidden"></div>
+  </main>
+
+  <script>
+    const SLOT_LABELS = ['7:00 – 7:30', '7:30 – 8:00', '8:00 – 8:30', '8:30 – 9:00'];
+    let currentUser = null;
+    let currentEventId = null;
+    let regType = 'activity';
+    let myReg = null;
+    let myWaitlist = null;
+    let currentEventFees = { social: 1900, training: 4500 };
+
+    function money(cents) {
+      const v = (Number(cents) || 0) / 100;
+      return '$' + (Number.isInteger(v) ? v : v.toFixed(2));
+    }
+    function payBadge(status) {
+      const label = { paid: 'Paid', unpaid: 'Unpaid', submitted: 'Awaiting review', waived: 'Waived' }[status] || status;
+      return `<span class="pay-badge pay-${status}">${label}</span>`;
+    }
+    // Event end = event_date + end_time in the viewer's local timezone.
+    function eventEnd(ev) {
+      if (!ev || !ev.event_date) return null;
+      const t = (ev.end_time || '21:00').slice(0, 5);
+      const d = new Date(`${ev.event_date}T${t}:00`);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    // Absolute timestamp in Sydney time (the event's own timezone), so the
+    // 24-hour cancellation cutoff reads the same on every device.
+    function fmtDateTime(ms) {
+      if (ms == null) return '';
+      const d = new Date(ms);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('en-AU', {
+        timeZone: 'Australia/Sydney',
+        weekday: 'short', day: 'numeric', month: 'short',
+        hour: 'numeric', minute: '2-digit', hour12: true,
+      });
+    }
+    function feeFor(ev, type) {
+      return type === 'training_and_activity'
+        ? (ev.fee_training_cents ?? 4500)
+        : (ev.fee_social_cents ?? 1900);
+    }
+
+    // Downscale a receipt photo in the browser before uploading, so the
+    // data URL stored in the DB stays small (usually well under 1MB).
+    function readImage(file) {
+      return new Promise((resolve, reject) => {
+        // Mobile pickers can hand back HEIC/HEIF or an empty MIME type, so accept
+        // any image and fall back to decoding it in the canvas below.
+        const looksLikeImage = /^image\//.test(file.type || '')
+          || (!file.type && /\.(png|jpe?g|webp|heic|heif)$/i.test(file.name || ''));
+        if (!looksLikeImage) {
+          return reject(new Error('Please choose an image from your album'));
+        }
+        if (file.size > 12 * 1024 * 1024) return reject(new Error('Image is too large (max 12MB)'));
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+          const max = 1400;
+          const scale = Math.min(1, max / Math.max(img.width, img.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+          resolve(canvas.toDataURL('image/jpeg', 0.8));
+        };
+        img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that image — please pick a JPG / PNG photo')); };
+        img.src = url;
+      });
+    }
+
+    // Show a thumbnail of the chosen receipt so the user can confirm they
+    // picked the right photo from their album before uploading.
+    let proofPreviewUrl = null;
+    function previewProof(input) {
+      const box = document.getElementById('proof-preview');
+      const img = document.getElementById('proof-preview-img');
+      const nameEl = document.getElementById('proof-file-name');
+      const err = document.getElementById('proof-err');
+      if (err) err.textContent = '';
+      const file = input.files && input.files[0];
+      if (!file) { box.classList.add('hidden'); return; }
+      if (proofPreviewUrl) URL.revokeObjectURL(proofPreviewUrl);
+      proofPreviewUrl = URL.createObjectURL(file);
+      img.src = proofPreviewUrl;
+      nameEl.textContent = file.name;
+      box.classList.remove('hidden');
+    }
+
+    async function loadMe() {
+      const r = await fetch('/api/auth/me');
+      currentUser = await r.json();
+      if (!currentUser) { window.location.href = '/login'; return; }
+      document.getElementById('user-info').textContent = `Hi, ${currentUser.display_name} (${currentUser.level})`;
+      document.getElementById('board-link').classList.remove('hidden');
+    }
+
+    async function loadEvents() {
+      const r = await fetch('/api/events');
+      const events = await r.json();
+      const visible = events.filter(ev => ev.status === 'open' || ev.status === 'active');
+      const list = document.getElementById('events-list');
+      if (!visible.length) {
+        list.innerHTML = '<div class="card"><div class="empty-state">No events open for registration yet. Check back soon!</div></div>';
+        return;
+      }
+      list.innerHTML = visible.map(ev => {
+        const isActive = ev.status === 'active';
+        const cap = ev.capacity || 33;
+        const taken = ev.reg_count || 0;
+        const full = taken >= cap;
+        const badge = isActive
+          ? '<span class="badge badge-active">🔴 Live</span>'
+          : '<span class="badge badge-open">Open</span>';
+        const primaryBtn = isActive
+          ? `<a class="btn btn-primary btn-block" href="/board?eventId=${ev.id}">📊 Enter Live Board</a>`
+          : `<button class="btn btn-primary btn-block" onclick="openEvent(${ev.id})">${full ? 'Full — Join Waitlist' : 'View & Register'}</button>`;
+        return `<div class="card">
+          <div class="flex-between" style="align-items:flex-start;">
+            <div>
+              <h2>${ev.title}</h2>
+              <div class="text-muted" style="font-size:13px;">${ev.event_date} · ${ev.start_time}-${ev.end_time}</div>
+              <div class="pay-fee-line">Social ${money(ev.fee_social_cents)} · Training+Social ${money(ev.fee_training_cents)}</div>
+              <div class="spots-line ${full ? 'full' : ''}">${taken}/${cap} spots${full ? ' · Full' : ''}${ev.waitlist_count ? ` · ${ev.waitlist_count} on waitlist` : ''}</div>
+            </div>
+            ${badge}
+          </div>
+          <div class="mt-12">${primaryBtn}</div>
+        </div>`;
+      }).join('');
+    }
+
+    // Global "you still owe" reminder shown as soon as a user logs in.
+    async function loadReminders() {
+      const el = document.getElementById('pay-reminder');
+      if (!currentUser) { el.innerHTML = ''; return; }
+      const r = await fetch('/api/registrations/my');
+      if (!r.ok) { el.innerHTML = ''; return; }
+      const { registrations } = await r.json();
+      const due = (registrations || []).filter(x => ['unpaid', 'submitted'].includes(x.payment_status));
+      if (!due.length) { el.innerHTML = ''; return; }
+      due.forEach(x => { if (x.fee_cents == null) x.fee_cents = feeFor({}, x.reg_type); });
+      const owed = due.filter(x => x.payment_status === 'unpaid').reduce((s, x) => s + (x.fee_cents || 0), 0);
+      el.innerHTML = `<div class="card pay-reminder">
+        <div class="pr-head">💳 Payment reminder · 付款提醒</div>
+        <div class="pr-sub">You have ${due.length} registration(s) awaiting payment${owed ? ` · ${money(owed)} outstanding` : ''}.
+          Please pay before the event ends.</div>
+        ${due.map(x => `<div class="pr-row" onclick="openEvent(${x.event_id})">
+          <div>
+            <strong>${x.event_title}</strong>
+            <div class="pr-meta">${x.event_date} · ${x.start_time}-${x.end_time}</div>
+          </div>
+          <div class="pr-right">${money(x.fee_cents)}<br>${payBadge(x.payment_status)}</div>
+        </div>`).join('')}
+      </div>`;
+    }
+
+    // Payment card shown after registration: amount due, deadline, online
+    // payment link (Apple Pay / card via Stripe), bank details, and receipt upload.
+    function paymentPanel(reg, ev) {
+      const status = reg.payment_status || 'unpaid';
+      const fee = reg.fee_cents != null ? reg.fee_cents : feeFor(ev, reg.reg_type);
+      const end = eventEnd(ev);
+      const settled = status === 'paid' || status === 'waived';
+      const statusLine =
+        status === 'paid' ? '<span class="status-ok">✅ Payment confirmed by admin</span>'
+        : status === 'waived' ? '<span class="status-ok">✅ Fee waived by admin</span>'
+        : status === 'submitted' ? '<span class="status-wait">⏳ Proof submitted — awaiting admin confirmation</span>'
+        : '<span style="color:#b91c1c;font-weight:700;">⚠️ Payment required</span>';
+      const payLink = ev.payment_link
+        ? `<a class="btn btn-primary btn-block mt-8" href="${ev.payment_link}" target="_blank" rel="noopener">💳 Pay now (Apple Pay / Card)</a>`
+        : '';
+      const bank = settled ? '' : `<div class="bank-mini">
+        Bank transfer · 银行转账：<br>
+        Name：<code>N1 Badminton</code> · Bank：<code>NAB</code><br>
+        BSB：<code>084-961</code> · Account：<code>271-605-706</code><br>
+        Reference：<code>Your name + ${ev.event_date || 'session date'}</code>
+      </div>`;
+      const upload = settled ? '' : `
+        <div class="upload-block">
+          <div class="upload-title">Already paid? Upload your receipt · 上传付款凭证</div>
+          <input class="hidden" id="proof-file" type="file" accept="image/*" onchange="previewProof(this)">
+          <label class="btn btn-secondary btn-block mt-8" for="proof-file">📷 Choose from album / 从相册选择</label>
+          <div class="upload-preview hidden" id="proof-preview">
+            <img id="proof-preview-img" alt="Receipt preview">
+            <div class="upload-file-name" id="proof-file-name"></div>
+          </div>
+          <input class="pay-note" id="proof-note" type="text" maxlength="300" placeholder="Reference / note (optional)">
+          <button class="btn btn-secondary btn-block" id="proof-btn" onclick="submitProof(${reg.id})">Upload payment proof</button>
+          <div class="error" id="proof-err"></div>
+        </div>`;
+      return `<div class="pay-panel ${settled ? '' : 'due'}">
+        <div class="pay-title"><span>Payment · 付款</span>${payBadge(status)}</div>
+        <div class="pay-amount">${money(fee)}</div>
+        <div style="font-size:12px;">${statusLine}</div>
+        ${settled ? '' : `<div class="pay-deadline">${end ? 'Pay before the event ends · ' + end.toLocaleString() : 'Please pay before the event ends.'}</div>`}
+        ${payLink}
+        ${bank}
+        ${upload}
+      </div>`;
+    }
+
+    async function openEvent(eventId) {
+      currentEventId = eventId;
+      const r = await fetch(`/api/events/${eventId}/registrations`);
+      const d = await r.json();
+      myReg = d.registration || null;
+      myWaitlist = d.waitlistEntry || null;
+      const ev = d.event || {};
+      const capacity = d.capacity || 33;
+      const taken = d.regCount || 0;
+      const full = taken >= capacity;
+      currentEventFees = {
+        social: ev.fee_social_cents ?? 1900,
+        training: ev.fee_training_cents ?? 4500,
+      };
+      // Cancellation closes 24 hours before the event starts (server time is
+      // authoritative; `null` means the date could not be parsed → allow it).
+      const canCancel = d.cancelOpen !== false;
+      const deadlineText = fmtDateTime(d.cancelDeadline);
+
+      document.getElementById('events-list').classList.add('hidden');
+      document.getElementById('info-banner').classList.add('hidden');
+      document.getElementById('pay-reminder').classList.add('hidden');
+      const view = document.getElementById('reg-view');
+      view.classList.remove('hidden');
+
+      if (myReg) {
+        // Already registered
+        const isTraining = myReg.reg_type === 'training_and_activity';
+        const slotText = isTraining
+          ? (myReg.training_slot != null ? SLOT_LABELS[myReg.training_slot] : 'Training time to be assigned')
+          : 'Social only';
+        const partnerText = myReg.partner_name ? ` with ${myReg.partner_name}${myReg.sticky_pair ? ' 🔒' : ''}` : '';
+        view.innerHTML = `
+          <div class="card">
+            <div class="success">
+              <div class="icon">✅</div>
+              <h3>You're registered!</h3>
+              <p>${slotText}${partnerText}</p>
+            </div>
+            <div class="info-row"><span class="label">Event</span><span class="val">${d.event_title || ''}</span></div>
+            <div class="info-row"><span class="label">Type</span><span class="val">${isTraining ? 'Training + Social' : 'Social Only'}</span></div>
+            ${isTraining ? `<div class="info-row"><span class="label">Training time</span><span class="val">${myReg.training_slot != null ? SLOT_LABELS[myReg.training_slot] : 'Assigned by the organiser'}</span></div>` : ''}
+            ${myReg.partner_name ? `<div class="info-row"><span class="label">Partner</span><span class="val">${myReg.partner_name}${myReg.sticky_pair ? ' 🔒' : ''}</span></div>` : ''}
+            <div class="mt-12">${paymentPanel(myReg, ev)}</div>
+            <div class="mt-16">
+              <div class="error" id="cancel-err"></div>
+              ${canCancel
+                ? `${deadlineText ? `<div class="cancel-policy">Free cancellation until <strong>${deadlineText}</strong> — 24 hours before the event.</div>` : ''}
+                   <button class="btn btn-secondary btn-block mt-8" id="cancel-btn" onclick="cancelReg(${myReg.id})">Cancel Registration</button>`
+                : `<div class="cancel-locked">🔒 Cancellation closed — less than 24 hours before the event.<br>
+                     You can no longer cancel, and the fee is still payable even if you cannot attend.</div>`}
+              <button class="btn btn-secondary btn-block mt-8" onclick="backToList()">Back to Events</button>
+            </div>
+          </div>
+        `;
+      } else if (myWaitlist) {
+        // Event is full — the user is queued for a spot.
+        view.innerHTML = `
+          <div class="card">
+            <button class="btn btn-secondary mb-12" onclick="backToList()">← Back</button>
+            <div class="success">
+              <div class="icon">⏳</div>
+              <h3>You're on the waitlist</h3>
+              <p>${d.event_title || ''} · ${ev.event_date || ''}</p>
+              <p>Position #${myWaitlist.position} · ${taken}/${capacity} spots taken</p>
+            </div>
+            <div class="pay-panel" style="margin-top:12px;">
+              <div class="pay-title"><span>Waitlist · 候补</span></div>
+              <div style="font-size:12px;color:var(--n-600);">
+                No payment is needed while you're waiting. If a spot opens and the organiser adds you,
+                the payment options will appear here.
+              </div>
+            </div>
+            <div class="mt-16">
+              <div class="error" id="waitlist-err"></div>
+              <button class="btn btn-secondary btn-block" onclick="cancelWaitlist(${myWaitlist.id})">Leave waitlist</button>
+              <button class="btn btn-secondary btn-block mt-8" onclick="backToList()">Back to Events</button>
+            </div>
+          </div>
+        `;
+      } else {
+        // Registration form
+        view.innerHTML = `
+          <div class="card">
+            <button class="btn btn-secondary mb-12" onclick="backToList()">← Back</button>
+            <h2>Register for Event</h2>
+            <div class="spots-line ${full ? 'full' : ''}">${taken}/${capacity} spots${full ? ' · Full' : ''}</div>
+            ${full ? `<div class="pay-reminder card" style="margin:12px 0;padding:12px;">
+              <div class="pr-head">⏳ Event full · 活动已满员</div>
+              <div class="pr-sub">All ${capacity} spots are taken. Join the waitlist — the organiser will add you if a spot opens.</div>
+            </div>` : ''}
+            <div class="text-muted" style="font-size:13px; margin-bottom:16px;">Select your participation type</div>
+            <div class="type-grid">
+              <button class="type-btn sel" id="type-activity" onclick="pickType('activity')">
+                <div class="icon">🏸</div>
+                <div class="label">Social Only</div>
+                <div class="pay-fee-line">${money(ev.fee_social_cents)}</div>
+              </button>
+              <button class="type-btn" id="type-training" onclick="pickType('training')">
+                <div class="icon">🏋</div>
+                <div class="label">Training + Social</div>
+                <div class="pay-fee-line">${money(ev.fee_training_cents)}</div>
+              </button>
+            </div>
+            <div id="slot-note" class="cancel-policy hidden">
+              🕖 Training times are assigned by the organiser after registration.
+            </div>
+            <div class="pay-panel due" style="margin-top:14px;">
+              <div class="pay-title"><span>Amount due · 应付金额</span><span id="due-amount">${money(ev.fee_social_cents)}</span></div>
+              <div class="pay-deadline">Please pay before the event ends. Payment can be completed after registering.</div>
+              <div class="cancel-policy">Free cancellation closes 24 hours before the event${deadlineText ? ` (<strong>${deadlineText}</strong>)` : ''}. After that the fee is still payable even if you cannot attend.</div>
+            </div>
+            <div class="error" id="reg-err"></div>
+            <div class="mt-16">
+              <button class="btn btn-primary btn-block" onclick="submitReg()">${full ? '⏳ Join Waitlist' : 'Confirm Registration'}</button>
+            </div>
+          </div>
+        `;
+        regType = 'activity';
+      }
+    }
+
+    function pickType(t) {
+      regType = t === 'training' ? 'training_and_activity' : 'activity';
+      document.getElementById('type-activity').classList.toggle('sel', t === 'activity');
+      document.getElementById('type-training').classList.toggle('sel', t === 'training');
+      const note = document.getElementById('slot-note');
+      if (note) note.classList.toggle('hidden', t !== 'training');
+      const due = document.getElementById('due-amount');
+      if (due) due.textContent = money(t === 'training' ? currentEventFees.training : currentEventFees.social);
+    }
+
+    async function submitReg() {
+      const err = document.getElementById('reg-err');
+      err.textContent = '';
+      try {
+        const r = await fetch(`/api/events/${currentEventId}/registrations`, {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ reg_type: regType })
+        });
+        const d = await r.json();
+        if (!r.ok) { err.textContent = d.error || 'Registration failed'; return; }
+        openEvent(currentEventId);
+        loadEvents();
+        loadReminders();
+      } catch(e) { err.textContent = 'Network error: ' + e.message; }
+    }
+
+    // Leave the waitlist (only shown while queued for a full event).
+    async function cancelWaitlist(waitlistId) {
+      if (!confirm('Leave the waitlist?')) return;
+      const err = document.getElementById('waitlist-err');
+      err.textContent = '';
+      try {
+        const r = await fetch(`/api/registrations/waitlist/${waitlistId}`, { method: 'DELETE' });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          err.textContent = d.error || `Failed (${r.status})`;
+          return;
+        }
+        backToList();
+        loadEvents();
+      } catch (e) { err.textContent = 'Network error: ' + e.message; }
+    }
+
+    // Upload a receipt screenshot; status becomes "submitted" until an admin
+    // confirms it on the dashboard.
+    async function submitProof(regId) {
+      const err = document.getElementById('proof-err');
+      const btn = document.getElementById('proof-btn');
+      const file = document.getElementById('proof-file').files[0];
+      err.textContent = '';
+      if (!file) { err.textContent = 'Please choose a receipt image first'; return; }
+      btn.disabled = true;
+      const label = btn.textContent;
+      btn.textContent = 'Uploading…';
+      try {
+        const proof = await readImage(file);
+        const r = await fetch(`/api/registrations/${regId}/payment-proof`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ proof, note: document.getElementById('proof-note').value.trim() }),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          err.textContent = d.error || `Upload failed (${r.status})`;
+          btn.disabled = false; btn.textContent = label;
+          return;
+        }
+        await openEvent(currentEventId);
+        loadReminders();
+      } catch (e) {
+        err.textContent = e.message || 'Upload failed';
+        btn.disabled = false; btn.textContent = label;
+      }
+    }
+
+    async function cancelReg(regId) {
+      // Single guard: a "No" here ends the flow with no side effects.
+      if (!confirm('Cancel your registration?')) return;
+
+      const btn = document.getElementById('cancel-btn');
+      const err = document.getElementById('cancel-err');
+      err.textContent = '';
+      btn.disabled = true;
+      const originalLabel = btn.textContent;
+      btn.textContent = 'Cancelling…';
+
+      try {
+        const r = await fetch(`/api/registrations/${regId}`, { method: 'DELETE' });
+        if (!r.ok) {
+          const d = await r.json().catch(() => ({}));
+          err.textContent = d.error || `Cancellation failed (${r.status})`;
+          btn.disabled = false;
+          btn.textContent = originalLabel;
+          return; // stay on the page; registration is still active
+        }
+        // Success only: leave the detail view and refresh the list + reminder.
+        backToList();
+        loadEvents();
+        loadReminders();
+      } catch (e) {
+        err.textContent = 'Network error: ' + e.message;
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+      }
+    }
+
+    function backToList() {
+      document.getElementById('reg-view').classList.add('hidden');
+      document.getElementById('events-list').classList.remove('hidden');
+      document.getElementById('info-banner').classList.remove('hidden');
+      document.getElementById('pay-reminder').classList.remove('hidden');
+      currentEventId = null;
+    }
+
+    document.getElementById('logout').onclick = async (e) => {
+      e.preventDefault();
+      await fetch('/api/auth/logout', { method:'POST' });
+      window.location.href = '/login';
+    };
+
+    loadMe().then(() => { loadEvents(); loadReminders(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# render.yaml — Render deployment config for N1 Badminton
+#
+# This app uses PostgreSQL (Supabase or Render Postgres) for persistent data
+# and stores the live-board state in an ephemeral state.json (reconstructed
+# from the DB when an event is activated, so data loss on restart is fine).
+#
+# Environment variables you MUST set in Render dashboard:
+#   DATABASE_URL        — connection string from Supabase (postgresql://...)
+#   SESSION_SECRET      — a long random string for signing session cookies
+#   BOOTSTRAP_ADMIN_PASSWORD — password for the first admin account (set once)
+#
+# To keep the free instance alive, point UptimeRobot/cron-job.org at your
+# Render URL every 5 minutes.
+
+services:
+  - type: web
+    name: n1-badminton-new
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: NODE_ENV
+        value: production
+      # DATABASE_URL, SESSION_SECRET, BOOTSTRAP_ADMIN_PASSWORD must be set
+      # in the Render dashboard (do NOT commit them here).
+      - key: DATABASE_URL
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: BOOTSTRAP_ADMIN_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_ADMIN_USERNAME
+        value: admin
+      - key: STATE_FILE
+        value: /tmp/state.json

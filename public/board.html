@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>🏸 N1 Badminton Social</title>
+  <link rel="stylesheet" href="/common.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap" rel="stylesheet">
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
+  <style>
+    /* board.html — page-specific styles (Morandi Green + Purple).
+       Base reset, body, .app-header, .card, .btn, .badge, inputs,
+       .level-dot, .pair-badge, .timer-bar, .empty-state, table, .slots,
+       and utilities are provided by /common.css. */
+
+    /* Header inner layout (wrapper uses .app-header from common.css) */
+    .hd { max-width:1100px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+    .hd-title { font-size:20px; font-weight:900; letter-spacing:0.2px; font-family:'Fredoka One',cursive; }
+    .hd-sub { font-size:11px; color:rgba(255,255,255,0.7); margin-top:2px; }
+    .hd-right { text-align:right; }
+    .hd-btn-row { display:flex; gap:6px; margin-top:5px; flex-wrap:wrap; justify-content:flex-end; align-items:center; }
+    .hd-online { font-size:11px; color:rgba(255,255,255,0.7); margin-bottom:3px; }
+    #my-status { font-size:12px; font-weight:600; }
+
+    /* Compact pill admin toolbar */
+    .admin-btn {
+      background:rgba(255,255,255,0.14); border:1px solid rgba(255,255,255,0.22); color:white;
+      cursor:pointer; border-radius:999px; padding:5px 12px; font-size:12px; font-weight:700;
+      font-family:inherit; transition:background var(--t-fast); text-decoration:none;
+      display:inline-flex; align-items:center;
+    }
+    .admin-btn:hover { background:rgba(255,255,255,0.24); }
+    a.admin-btn { text-decoration:none; display:inline-flex; align-items:center; }
+    .admin-btn.danger { background:rgba(229,115,115,0.22); border-color:rgba(229,115,115,0.45); color:#ffe2e2; }
+    .admin-btn.danger:hover { background:rgba(229,115,115,0.34); }
+    .admin-btn.on { background:rgba(168,197,181,0.28); border-color:rgba(168,197,181,0.55); color:#eaf3ee; }
+
+    .page-wrap { display:block; }
+    main { max-width:1100px; margin:0 auto; padding:22px 18px 100px; }
+    .page-wrap.admin-layout { display:flex; align-items:flex-start; }
+    .page-wrap.admin-layout main { flex:1; min-width:0; max-width:none; margin:0; }
+    .history-sidebar {
+      display:none;
+      width:268px; flex-shrink:0;
+      position:sticky; top:72px;
+      max-height:calc(100vh - 72px);
+      overflow-y:auto;
+      background:var(--card);
+      border-left:1.5px solid var(--n-100);
+    }
+    .history-sidebar.visible { display:block; }
+    @media(max-width:900px) {
+      .page-wrap { flex-direction:column; }
+      .history-sidebar { width:100%; position:static; max-height:360px; border-left:none; border-top:1.5px solid var(--n-100); }
+    }
+
+    .join-sticky {
+      position:sticky; top:var(--header-h, 70px); z-index:30;
+      margin:0 -18px 22px; padding:10px 18px 12px;
+      background:linear-gradient(180deg,var(--mg-50) 0%,var(--mg-50) 62%,rgba(243,247,244,0) 100%);
+    }
+    .main-join-btn {
+      display:block; width:100%;
+      background:var(--accent-grad);
+      color:white; border:none; cursor:pointer;
+      padding:16px; border-radius:var(--r-card);
+      font-size:16px; font-weight:800; font-family:inherit;
+      box-shadow:0 4px 16px rgba(123,166,150,0.32);
+      transition:box-shadow var(--t-fast), transform 0.1s;
+    }
+    .main-join-btn:hover { box-shadow:0 6px 20px rgba(123,166,150,0.42); }
+    .main-join-btn:active { transform:scale(0.98); }
+
+    .howto {
+      background:var(--card); border:1.5px solid var(--mg-200); border-left:4px solid var(--mg-500);
+      border-radius:var(--r-card); padding:14px 16px; margin-bottom:22px;
+      display:flex; gap:12px; align-items:flex-start;
+      box-shadow:var(--shadow-sm);
+    }
+    .howto-icon { font-size:22px; flex-shrink:0; margin-top:1px; }
+    .howto-body { flex:1; }
+    .howto-title { font-size:13px; font-weight:800; color:var(--mg-800); margin-bottom:6px; }
+    .howto-steps { display:flex; align-items:center; flex-wrap:wrap; gap:5px; }
+    .howto-step { background:var(--mg-100); color:var(--mg-800); font-size:11px; font-weight:700; padding:4px 10px; border-radius:20px; }
+    .howto-arrow { color:var(--n-400); font-size:12px; }
+
+    .sec-label {
+      font-size:11px; font-weight:800; letter-spacing:1.2px;
+      text-transform:uppercase; color:var(--mg-700);
+      margin-bottom:12px; display:flex; align-items:center; gap:8px;
+    }
+    .sec-chips { display:flex; gap:6px; flex-wrap:wrap; }
+    .sec-chip { font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px; background:var(--card); border:1.5px solid var(--mg-200); color:var(--mg-700); box-shadow:var(--shadow-sm); }
+    .sec-chip.on { background:var(--mg-100); color:var(--mg-800); border-color:var(--mg-500); }
+    .sec-add-btn { margin-left:auto; flex-shrink:0; background:var(--card); border:1.5px solid var(--mg-500); color:var(--mg-700); cursor:pointer; border-radius:var(--r-badge); padding:3px 11px; font-size:11px; font-weight:700; font-family:inherit; transition:background var(--t-fast),color var(--t-fast); }
+    .sec-add-btn:hover { background:var(--mg-500); color:white; }
+
+    .courts-grid { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:26px; }
+    @media(min-width:480px) { .courts-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(min-width:560px) { .courts-grid { grid-template-columns:repeat(3,1fr); } }
+    @media(min-width:900px) { .courts-grid { grid-template-columns:repeat(5,1fr); } }
+
+    /* On Deck: horizontal scroll on mobile */
+    @media(max-width:559px) {
+      .next-grid { display:flex; flex-direction:row; overflow-x:auto; gap:14px; padding-bottom:8px; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; }
+      .next-grid > .court-card { flex:0 0 85%; max-width:260px; scroll-snap-align:start; }
+    }
+
+    .court-card {
+      background:var(--card); border-radius:20px; overflow:hidden;
+      box-shadow:var(--shadow);
+      border-top:3px solid var(--mg-300);
+      display:flex; flex-direction:column;
+      transition:box-shadow var(--t),transform var(--t);
+    }
+    .court-card:hover { transform:translateY(-3px); box-shadow:var(--shadow-lg); }
+    .court-card.live { box-shadow:0 4px 22px rgba(123,166,150,0.28),0 0 0 2px var(--mg-500); border-top-color:var(--mg-500); }
+    .court-card.live:hover { box-shadow:0 10px 30px rgba(123,166,150,0.35),0 0 0 2px var(--mg-500); }
+    .next-card { background:var(--mp-50); border:1.5px dashed var(--mp-200); border-top:3px solid var(--mp-300); box-shadow:var(--shadow-sm); }
+    .next-card .court-head { background:linear-gradient(135deg,var(--mp-400) 0%,var(--mp-600) 100%); }
+
+    .q-item[draggable="true"], .p-cell[draggable="true"] { cursor:grab; }
+    .q-item[draggable="true"]:active, .p-cell[draggable="true"]:active { cursor:grabbing; }
+    .q-item.dragging, .p-cell.dragging { opacity:0.4; }
+    .court-card.drag-over { box-shadow:0 0 0 3px var(--mg-500),0 10px 28px rgba(123,166,150,0.38); transform:translateY(-2px); }
+    .court-card.next-card.drag-over { border-style:solid; border-color:var(--mg-500); }
+    .q-card.drag-over { box-shadow:0 0 0 3px var(--mg-500),0 10px 28px rgba(123,166,150,0.30); }
+    .p-cell.cell-drop { background:var(--mg-100); box-shadow:0 0 0 2px var(--mg-500) inset; }
+    .p-cell.cell-drop .p-name { color:var(--mg-800); }
+
+    .court-head { padding:13px 15px; display:flex; align-items:center; justify-content:space-between; position:relative; overflow:hidden; background:linear-gradient(135deg,var(--mg-500) 0%,var(--mg-700) 100%); }
+    .court-head::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,0.14) 0%,transparent 60%); pointer-events:none; }
+    .court-name { font-size:14px; font-weight:900; color:white; letter-spacing:-0.2px; }
+    .court-badge { font-size:10px; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(255,255,255,0.22); color:white; backdrop-filter:blur(4px); }
+    .court-badge.live { background:white; color:var(--mg-700); font-variant-numeric:tabular-nums; }
+    .court-timer { font-weight:800; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.55} }
+    .court-rm-btn { background:rgba(255,255,255,0.18); border:1px solid rgba(255,255,255,0.3); color:rgba(255,255,255,0.85); cursor:pointer; border-radius:6px; padding:1px 7px; font-size:15px; font-weight:700; line-height:1.4; font-family:inherit; margin-left:auto; transition:background var(--t-fast); }
+    .court-rm-btn:hover { background:rgba(229,115,115,0.5); color:white; }
+
+    .p-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; padding:10px 12px; flex:1; }
+    .p-cell { border-radius:11px; padding:7px 9px; display:flex; align-items:center; justify-content:space-between; min-height:38px; min-width:0; }
+    .p-cell.filled { background:var(--mg-50); border:1.5px solid var(--mg-200); }
+    .p-cell.filled.me { background:var(--mg-100); border-color:var(--mg-500); }
+    .p-cell.empty { background:var(--n-50); border:1.5px dashed var(--n-200); justify-content:center; }
+    .p-name { font-size:12px; font-weight:700; color:var(--n-700); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:58px; }
+    .p-name.me { color:var(--mg-700); }
+    .p-empty-txt { font-size:11px; color:var(--n-300); }
+    .p-rm { border:none; background:none; cursor:pointer; color:var(--n-300); font-size:16px; line-height:1; padding:0 0 0 4px; border-radius:4px; transition:color var(--t-fast); flex-shrink:0; min-width:0; }
+    .p-rm:hover { color:#c45555; }
+
+    .c-actions { padding:0 12px 12px; display:flex; gap:7px; }
+    .c-btn { flex:1; min-width:0; border:none; cursor:pointer; border-radius:11px; padding:10px 6px; font-size:11px; font-weight:700; font-family:inherit; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; transition:opacity var(--t-fast),transform 0.1s; line-height:1.3; }
+    .c-btn:active { transform:scale(0.96); }
+    .c-btn:hover { opacity:0.82; }
+    .c-btn.fill { color:white; background:var(--accent-grad); }
+    .c-btn.eq { background:var(--mg-100); color:var(--mg-800); }
+    .c-btn.dim { background:var(--n-100); color:var(--n-400); cursor:default; font-weight:600; }
+    .c-btn.c-undo { background:rgba(180,168,197,0.18); border:1.5px solid rgba(155,139,169,0.5); color:var(--mp-700); }
+    .c-btn.c-undo:hover { background:rgba(180,168,197,0.3); }
+
+    .admin-mode .courts-grid { gap:10px; margin-bottom:18px; }
+    .admin-mode .court-head { padding:9px 12px; }
+    .admin-mode .court-name { font-size:13px; }
+    .admin-mode .court-badge { font-size:9px; padding:2px 7px; }
+    .admin-mode .p-grid { gap:4px; padding:7px 9px; }
+    .admin-mode .p-cell { min-height:30px; padding:5px 7px; border-radius:9px; }
+    .admin-mode .p-name { font-size:11px; max-width:52px; }
+    .admin-mode .p-empty-txt { font-size:10px; }
+    .admin-mode .c-actions { padding:0 9px 9px; gap:5px; }
+    .admin-mode .c-btn { padding:7px 4px; font-size:10px; border-radius:9px; }
+
+    .q-card { background:var(--card); border-radius:20px; box-shadow:var(--shadow); overflow:hidden; border-top:3px solid var(--mg-300); }
+    .q-head { padding:16px 18px 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--n-100); background:linear-gradient(to bottom,var(--mg-50),white); }
+    .q-title-row { display:flex; align-items:center; gap:9px; }
+    .q-title { font-size:17px; font-weight:900; }
+    .q-badge { background:var(--mg-100); color:var(--mg-800); font-size:12px; font-weight:700; padding:4px 11px; border-radius:20px; border:1px solid var(--mg-200); }
+    .join-btn { background:var(--accent-grad); color:white; border:none; cursor:pointer; padding:10px 20px; border-radius:11px; font-size:13px; font-weight:700; font-family:inherit; box-shadow:0 2px 8px rgba(123,166,150,0.3); transition:box-shadow var(--t-fast),transform 0.1s; }
+    .join-btn.alt { background:linear-gradient(135deg,var(--mp-400),var(--mp-600)); box-shadow:0 2px 8px rgba(132,120,153,0.3); }
+    .join-btn:hover { box-shadow:0 4px 14px rgba(123,166,150,0.4); }
+    .join-btn:active { transform:scale(0.97); }
+    .q-empty { text-align:center; color:var(--n-400); font-size:14px; padding:44px 16px; }
+    .q-empty-icon { font-size:44px; margin-bottom:12px; }
+    .q-empty-hint { font-size:12px; color:var(--n-400); margin-top:7px; }
+    .q-list { padding:10px 14px 14px; display:flex; flex-direction:column; gap:6px; }
+    .q-item { display:flex; align-items:center; gap:11px; padding:11px 14px; border-radius:13px; background:var(--mg-50); border:1.5px solid transparent; transition:background var(--t-fast),border-color var(--t-fast); }
+    .q-item:hover { background:var(--mg-100); border-color:var(--mg-200); }
+    .q-item.me { background:var(--mg-100); border-color:var(--mg-200); }
+    .q-item.me:hover { background:var(--mg-200); }
+    .q-pos { width:24px; text-align:center; font-size:12px; font-weight:800; color:var(--n-300); font-variant-numeric:tabular-nums; flex-shrink:0; }
+    .q-pos.next { color:var(--mg-500); }
+    .q-name { flex:1; font-size:14px; font-weight:600; color:var(--n-700); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .q-name.me { color:var(--mg-700); font-weight:700; }
+    .q-actions { display:flex; gap:5px; flex-shrink:0; }
+    .q-assign-btn { background:var(--card); border:1.5px solid var(--n-200); color:var(--n-500); cursor:pointer; width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:13px; transition:all var(--t-fast); box-shadow:var(--shadow-sm); }
+    .q-assign-btn:hover { background:var(--mg-50); border-color:var(--mg-500); color:var(--mg-700); }
+    .q-rm-btn { background:none; border:none; cursor:pointer; color:var(--n-300); width:32px; height:32px; border-radius:9px; display:flex; align-items:center; justify-content:center; font-size:18px; transition:color var(--t-fast); }
+    .q-rm-btn:hover { color:#c45555; }
+
+    /* Level dot overrides (common.css .level-dot uses margin-right; board needs flex-shrink) */
+    .level-dot { margin-right:0; flex-shrink:0; }
+    .level-dot.editable { cursor:pointer; box-shadow:0 0 0 2px rgba(255,255,255,0.6),0 0 0 3px rgba(0,0,0,0.15); width:12px; height:12px; }
+    .level-dot.editable:hover { opacity:0.75; }
+
+    /* Pair badge override (flex-shrink + nowrap for inline layouts) */
+    .pair-badge { flex-shrink:0; white-space:nowrap; }
+
+    .sticky-row { display:flex; align-items:center; gap:9px; padding:11px 13px; border:2px solid var(--n-200); border-radius:12px; background:var(--n-50); margin-bottom:6px; font-size:13px; font-weight:700; color:var(--n-700); cursor:pointer; user-select:none; transition:border-color var(--t-fast),background var(--t-fast); }
+    .sticky-row:hover { border-color:var(--n-400); }
+    .sticky-row.on { border-color:var(--mp-500); background:var(--mp-50); color:var(--mp-700); }
+    .sticky-row input { width:17px; height:17px; accent-color:var(--mp-600); flex-shrink:0; cursor:pointer; }
+    .sticky-hint { font-size:11px; color:var(--n-400); margin:0 2px 14px; line-height:1.45; }
+
+    /* ── Training module ── */
+    .training-grid { display:grid; grid-template-columns:1fr; gap:14px; margin-bottom:26px; }
+    @media(min-width:480px) { .training-grid { grid-template-columns:repeat(2,1fr); } }
+    @media(min-width:900px) { .training-grid { grid-template-columns:repeat(4,1fr); } }
+    .training-card { background:var(--card); border-radius:20px; overflow:hidden; box-shadow:var(--shadow); display:flex; flex-direction:column; transition:box-shadow var(--t),transform var(--t); border-top:3px solid var(--mp-300); }
+    .training-card:hover { transform:translateY(-2px); box-shadow:var(--shadow-lg); }
+    .training-head { padding:13px 15px; display:flex; align-items:center; justify-content:space-between; background:linear-gradient(135deg,var(--mp-500) 0%,var(--mp-700) 100%); color:white; position:relative; overflow:hidden; }
+    .training-head::after { content:''; position:absolute; inset:0; background:linear-gradient(135deg,rgba(255,255,255,0.14) 0%,transparent 60%); pointer-events:none; }
+    .training-time { font-size:14px; font-weight:900; }
+    .training-timer { font-size:12px; font-weight:800; font-variant-numeric:tabular-nums; background:rgba(255,255,255,0.22); padding:3px 9px; border-radius:20px; color:white; }
+    .training-timer.expired { background:rgba(229,115,115,0.6); animation:blink 1s infinite; }
+    .training-timer.idle { opacity:0.5; }
+    .training-players { padding:10px 12px; flex:1; display:flex; flex-direction:column; gap:6px; min-height:50px; }
+    .training-player { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 9px; border-radius:11px; background:var(--mp-50); border:1.5px solid var(--mp-200); }
+    .training-player-name { font-size:12px; font-weight:700; color:var(--n-700); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; flex:1; min-width:0; }
+    .training-return-btn { border:none; background:none; cursor:pointer; color:var(--n-400); font-size:11px; font-weight:700; padding:3px 8px; border-radius:6px; transition:all var(--t-fast); flex-shrink:0; font-family:inherit; }
+    .training-return-btn:hover { background:#fbe9e9; color:#c45555; }
+    .training-empty { text-align:center; color:var(--n-400); font-size:11px; padding:14px; }
+
+    .overlay { position:fixed; inset:0; background:rgba(15,23,42,0.5); backdrop-filter:blur(2px); display:flex; align-items:flex-end; justify-content:center; z-index:50; opacity:0; pointer-events:none; transition:opacity var(--t); }
+    .overlay.open { opacity:1; pointer-events:all; }
+    @media(min-width:480px) { .overlay { align-items:center; } }
+    .modal { background:var(--card); border-radius:24px 24px 0 0; padding:18px 18px 36px; width:100%; max-width:420px; transform:translateY(16px); transition:transform 0.25s cubic-bezier(.34,1.56,.64,1); box-shadow:0 -4px 40px rgba(15,23,42,0.15); }
+    @media(min-width:480px) { .modal { border-radius:24px; padding:28px 24px; transform:scale(0.95); box-shadow:0 20px 60px rgba(15,23,42,0.2); } .overlay.open .modal { transform:scale(1); } }
+    .overlay.open .modal { transform:translateY(0); }
+    .m-handle { width:40px; height:4px; background:var(--n-200); border-radius:4px; margin:0 auto 20px; }
+    @media(min-width:480px) { .m-handle { display:none; } }
+    .m-title { font-size:19px; font-weight:900; color:var(--n-900); margin-bottom:4px; }
+    .m-sub { font-size:13px; color:var(--n-500); margin-bottom:18px; }
+    .m-input { width:100%; border:2px solid var(--n-200); border-radius:var(--r-input); padding:13px 16px; font-size:16px; outline:none; font-family:inherit; color:var(--n-800); margin-bottom:14px; transition:border-color var(--t-fast),box-shadow var(--t-fast); background:var(--n-50); }
+    .m-input:focus { border-color:var(--mg-500); box-shadow:0 0 0 3px rgba(123,166,150,0.15); background:white; }
+    .m-row { display:flex; gap:10px; }
+    .m-btn { flex:1; border:none; cursor:pointer; border-radius:var(--r-btn); padding:14px; font-size:15px; font-weight:700; font-family:inherit; transition:opacity var(--t-fast),transform 0.1s; }
+    .m-btn:hover { opacity:0.88; }
+    .m-btn:active { transform:scale(0.97); }
+    .m-btn.cancel { background:var(--n-100); color:var(--n-600); }
+    .m-btn.ok { background:var(--accent-grad); color:white; box-shadow:0 3px 10px rgba(123,166,150,0.3); }
+    .m-btn.danger { background:linear-gradient(135deg,#e57373 0%,#c45555 100%); color:white; box-shadow:0 3px 10px rgba(196,85,85,0.3); }
+    .court-opt { width:100%; border:none; cursor:pointer; border-radius:var(--r-btn); padding:13px 16px; display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; font-family:inherit; font-size:14px; font-weight:700; color:white; transition:opacity var(--t-fast),transform 0.1s; box-shadow:var(--shadow); }
+    .court-opt:hover { opacity:0.9; transform:translateY(-1px); }
+    .court-opt:active { transform:scale(0.98); }
+    .court-opt-spots { font-size:12px; font-weight:500; opacity:0.85; }
+    .m-cancel-full { width:100%; margin-top:4px; border:none; cursor:pointer; border-radius:var(--r-btn); padding:13px; background:var(--n-100); color:var(--n-600); font-size:14px; font-weight:700; font-family:inherit; transition:background var(--t-fast); }
+    .m-cancel-full:hover { background:var(--n-200); }
+
+    .lvl-section-label { font-size:12px; font-weight:700; color:var(--n-600); margin-bottom:8px; }
+    .lvl-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:6px; margin-bottom:18px; }
+    .lvl-btn { border:2px solid var(--n-200); background:white; border-radius:10px; padding:9px 4px; font-size:13px; font-weight:800; cursor:pointer; font-family:inherit; color:var(--n-600); transition:all var(--t-fast); text-align:center; }
+    .lvl-btn:hover { border-color:var(--n-400); color:var(--n-800); }
+    .lvl-btn.sel { color:white !important; border-color:transparent !important; transform:scale(1.04); }
+
+    .partner-selector { display:flex; align-items:center; justify-content:space-between; padding:11px 14px; border:2px solid var(--n-200); border-radius:12px; background:var(--n-50); cursor:pointer; margin-bottom:16px; font-size:14px; font-weight:600; color:var(--n-400); transition:border-color var(--t-fast),background var(--t-fast); user-select:none; }
+    .partner-selector:hover { border-color:var(--n-400); }
+    .partner-selector.chosen { border-color:var(--mg-500); background:var(--mg-50); color:var(--mg-700); }
+    .partner-selector.open { border-color:var(--mg-500); border-bottom-left-radius:0; border-bottom-right-radius:0; }
+    .partner-chevron { font-size:12px; color:var(--n-400); transition:transform var(--t-fast); }
+    .partner-selector.open .partner-chevron { transform:rotate(180deg); }
+    .partner-list { max-height:220px; overflow-y:auto; border:2px solid var(--mg-500); border-top:none; border-bottom-left-radius:12px; border-bottom-right-radius:12px; background:white; margin-bottom:16px; }
+    .partner-search { position:sticky; top:0; z-index:2; width:100%; border:none; border-bottom:1.5px solid var(--n-100); padding:11px 14px; font-size:14px; font-family:inherit; outline:none; color:var(--n-800); background:white; }
+    .partner-search::placeholder { color:var(--n-400); }
+    .partner-search:focus { background:var(--mg-50); }
+    .partner-item { display:flex; align-items:center; gap:10px; padding:10px 14px; cursor:pointer; border-bottom:1px solid var(--n-100); transition:background 0.12s; user-select:none; }
+    .partner-item:last-child { border-bottom:none; }
+    .partner-item:hover { background:var(--mg-50); }
+    .partner-item.disabled:hover { background:transparent; }
+    .partner-item-name { flex:1; font-size:14px; font-weight:600; color:var(--n-700); }
+    .partner-none { color:var(--n-400); font-size:13px; }
+
+    .mf-item { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:11px; border:2px solid var(--n-200); background:var(--n-50); margin-bottom:6px; cursor:pointer; transition:all var(--t-fast); user-select:none; }
+    .mf-item.sel { background:var(--mg-50); border-color:var(--mg-500); }
+    .mf-item.disabled { opacity:0.38; cursor:default; }
+    .mf-check { width:20px; height:20px; border-radius:6px; border:2px solid var(--n-300); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; background:white; transition:all var(--t-fast); }
+    .mf-item.sel .mf-check { background:var(--mg-500); border-color:var(--mg-500); color:white; }
+    .mf-name { flex:1; font-size:14px; font-weight:600; color:var(--n-700); }
+    .mf-item.sel .mf-name { color:var(--mg-700); }
+    .mf-counter { text-align:center; font-size:13px; color:var(--n-500); margin-bottom:14px; }
+    .mf-counter span { font-weight:700; color:var(--mg-700); }
+    .mf-error { text-align:center; font-size:12px; color:#c45555; margin:-6px 0 12px; font-weight:600; }
+    #mf-list, #pair-list { max-height:45vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+
+    .name-error { color:#c45555; font-size:13px; margin:-8px 0 10px; display:none; }
+
+    .history-sidebar-title {
+      font-size:11px; font-weight:800; letter-spacing:1.2px;
+      text-transform:uppercase; color:var(--mg-700);
+      padding:18px 16px 12px;
+      border-bottom:1px solid var(--n-100);
+      background:linear-gradient(to bottom,var(--mg-50),white);
+      position:sticky; top:0; z-index:1;
+    }
+    .history-list { padding:12px 12px 24px; }
+    .history-empty { text-align:center; color:var(--n-400); padding:36px 14px; font-size:13px; }
+    .history-empty-icon { font-size:34px; margin-bottom:10px; }
+    .history-item { padding:11px 12px; border-radius:12px; border:1.5px solid var(--n-100); background:var(--n-50); margin-bottom:8px; transition:border-color var(--t-fast); }
+    .history-item:hover { border-color:var(--mg-200); background:var(--mg-50); }
+    .history-meta { font-size:10px; font-weight:700; color:var(--n-400); margin-bottom:6px; display:flex; align-items:center; gap:5px; }
+    .history-court-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .history-players { display:flex; flex-direction:column; gap:3px; }
+    .history-player { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; color:var(--n-700); }
+    .history-team { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:4px 6px; border-radius:8px; }
+    .history-team.win { background:var(--mg-100); }
+    .history-team-names { display:flex; align-items:center; gap:5px; flex-wrap:wrap; font-size:12px; font-weight:600; color:var(--n-700); }
+    .history-team.win .history-team-names { color:var(--mg-800); }
+    .history-score { font-size:14px; font-weight:900; color:var(--n-500); font-variant-numeric:tabular-nums; flex-shrink:0; white-space:nowrap; }
+    .history-team.win .history-score { color:var(--mg-700); }
+
+    .stat-section-title { font-size:11px; font-weight:800; letter-spacing:0.8px; text-transform:uppercase; color:var(--mg-700); margin-bottom:8px; }
+    .stat-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:8px 10px; border-radius:9px; }
+    .stat-row:nth-child(even) { background:var(--n-50); }
+    .stat-head { background:none !important; color:var(--n-400); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; padding-bottom:4px; }
+    .stat-name { display:flex; align-items:center; gap:7px; font-size:14px; font-weight:600; color:var(--n-700); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .stat-val { font-size:13px; font-weight:800; color:var(--mg-700); flex-shrink:0; font-variant-numeric:tabular-nums; }
+    .stat-cols { display:flex; gap:0; flex-shrink:0; }
+    .stat-cols > span { width:34px; text-align:center; font-size:14px; font-weight:800; color:var(--n-700); font-variant-numeric:tabular-nums; }
+    .stat-empty { text-align:center; color:var(--n-400); font-size:13px; padding:14px 0; }
+
+    .end-opt-label { font-size:12px; font-weight:700; color:var(--n-600); margin-bottom:8px; }
+    .end-opts { display:flex; flex-direction:column; gap:6px; margin-bottom:16px; }
+    .end-opt { width:100%; display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:4px; border:2px solid var(--n-200); background:white; border-radius:10px; padding:10px 8px; font-size:13px; font-weight:700; color:var(--n-600); cursor:pointer; font-family:inherit; transition:all var(--t-fast); }
+    .end-opt:hover { border-color:var(--n-400); color:var(--n-800); }
+    .end-opt.sel { border-color:var(--mg-500); background:var(--mg-50); color:var(--mg-800); }
+    .end-opt-vs { color:var(--n-400); font-weight:600; font-size:11px; margin:0 6px; }
+    .end-team { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 14px; border:2px solid var(--n-200); border-radius:12px; background:var(--n-50); }
+    .end-team-names { display:flex; align-items:center; gap:6px; flex-wrap:wrap; font-size:14px; font-weight:700; color:var(--n-700); }
+    .end-score { width:60px; flex-shrink:0; border:2px solid var(--n-200); border-radius:10px; padding:9px 6px; font-size:18px; font-weight:800; text-align:center; font-family:inherit; color:var(--n-800); outline:none; background:white; -moz-appearance:textfield; }
+    .end-score::-webkit-outer-spin-button, .end-score::-webkit-inner-spin-button { -webkit-appearance:none; margin:0; }
+    .end-score:focus { border-color:var(--mg-500); box-shadow:0 0 0 3px rgba(123,166,150,0.15); }
+    .end-vs { text-align:center; font-size:12px; font-weight:800; color:var(--n-400); margin:7px 0; letter-spacing:1px; }
+  </style>
+</head>
+<body>
+
+<header class="app-header">
+  <div class="hd">
+    <div>
+      <div class="hd-title">🏸 N1 Badminton Social</div>
+      <div class="hd-sub" id="user-info">Brisbane · Courts 6 – 10</div>
+      <div class="hd-sub" id="event-banner" style="display:none; margin-top:4px; font-weight:700; color:#ffd966;"></div>
+    </div>
+    <div class="hd-right">
+      <div class="hd-online">👥 <span id="online-count">—</span> online</div>
+      <div id="my-status"></div>
+      <div class="hd-btn-row">
+        <a href="/events.html" class="admin-btn" id="events-link">📅 Events</a>
+        <a href="/dashboard" class="admin-btn" id="dashboard-link" style="display:none">📊 Dashboard</a>
+        <button class="admin-btn" onclick="showQrModal()">📷 QR</button>
+        <button class="admin-btn" id="stats-btn" onclick="showStatsModal()" style="display:none">📊 Stats</button>
+        <button class="admin-btn" id="announce-btn" onclick="toggleAnnounce()" style="display:none">🔇 Announce</button>
+        <button class="admin-btn danger" id="reset-btn" onclick="showResetModal()" style="display:none">🗑 Reset</button>
+        <a href="#" class="admin-btn" id="logout">🚪 Logout</a>
+      </div>
+    </div>
+  </div>
+</header>
+
+<div class="page-wrap">
+<main>
+  <div class="howto" id="howto">
+    <div class="howto-icon">💡</div>
+    <div class="howto-body">
+      <div class="howto-title" id="howto-title"></div>
+      <div class="howto-steps" id="howto-steps"></div>
+    </div>
+  </div>
+  <div class="join-sticky" id="join-sticky">
+    <button class="main-join-btn" id="main-join-btn" onclick="showJoinModal()">Join Queue</button>
+  </div>
+
+  <div class="sec-label">
+    Courts
+    <div class="sec-chips" id="court-summary"></div>
+    <span id="add-court-wrap"></span>
+  </div>
+  <div class="courts-grid" id="courts-grid"></div>
+
+  <div class="sec-label" style="margin-top:10px">
+    On Deck
+    <div class="sec-chips" id="next-summary"></div>
+  </div>
+  <div class="courts-grid next-grid" id="next-grid"></div>
+
+  <div class="sec-label" id="training-section" style="margin-top:10px;display:none">Training Area</div>
+  <div class="training-grid" id="training-grid"></div>
+
+  <div class="sec-label" style="margin-top:10px">Waiting Queue</div>
+  <div class="q-card" id="q-card" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDropQueue(event)">
+    <div class="q-head">
+      <div class="q-title-row">
+        <span class="q-title">Waiting</span>
+        <span class="q-badge" id="q-badge">0 players</span>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">
+        <button class="join-btn alt" id="admin-pair-btn" onclick="showPairModal()" style="display:none">🔗 Pair</button>
+        <button class="join-btn" id="admin-add-btn" onclick="showJoinModal(true)" style="display:none">+ Add Player</button>
+      </div>
+    </div>
+    <div id="q-list"></div>
+  </div>
+</main>
+
+<aside class="history-sidebar" id="history-sidebar">
+  <div class="history-sidebar-title">📜 Game History</div>
+  <div class="history-list" id="history-list"></div>
+</aside>
+
+</div><!-- end page-wrap -->
+
+<!-- Join Modal -->
+<div class="overlay" id="join-modal" onclick="if(event.target===this)hideJoinModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title" id="join-title">Join Queue</div>
+    <div class="m-sub" id="join-sub">Enter your name to join</div>
+    <input class="m-input" id="name-input" type="text" placeholder="Your name" maxlength="20" autocomplete="off" autocorrect="off" spellcheck="false" onkeydown="if(event.key==='Enter')submitJoin()" oninput="clearNameError()">
+    <div class="name-error" id="name-error"></div>
+    <div class="lvl-section-label">Select your level</div>
+    <div class="lvl-grid" id="lvl-picker"></div>
+    <div class="lvl-section-label" style="margin-top:4px">Play with (optional)</div>
+    <div class="partner-selector" id="partner-selector" onclick="togglePartnerDrop()"></div>
+    <div class="partner-list" id="partner-list" style="display:none;margin-top:6px"></div>
+    <div id="sticky-wrap" style="display:none">
+      <label class="sticky-row" id="sticky-row">
+        <input type="checkbox" id="sticky-input" onchange="onStickyToggle()">
+        <span>🔒 LOCK pair — stay together all session</span>
+      </label>
+      <div class="sticky-hint" id="sticky-hint">Off (default): you two are queued together, then the pair automatically ends after your first game. On: you stay paired all session until an admin unpairs you.</div>
+    </div>
+    <div class="m-row">
+      <button class="m-btn cancel" onclick="hideJoinModal()">Cancel</button>
+      <button class="m-btn ok" onclick="submitJoin()">Join</button>
+    </div>
+  </div>
+</div>
+
+<!-- Assign Modal -->
+<div class="overlay" id="assign-modal" onclick="if(event.target===this)hideAssignModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">Assign to Court</div>
+    <div class="m-sub" id="assign-sub"></div>
+    <div id="assign-courts"></div>
+    <button class="m-cancel-full" onclick="hideAssignModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Manual Fill Modal -->
+<div class="overlay" id="mf-modal" onclick="if(event.target===this)hideMfModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title" id="mf-title">Pick Players</div>
+    <div class="mf-counter" id="mf-counter"></div>
+    <div class="mf-error" id="mf-error" style="display:none"></div>
+    <div id="mf-list"></div>
+    <div class="m-row" style="margin-top:4px">
+      <button class="m-btn cancel" onclick="hideMfModal()">Cancel</button>
+      <button class="m-btn ok" id="mf-confirm" onclick="submitMf()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<!-- Pair Players Modal (admin) -->
+<div class="overlay" id="pair-modal" onclick="if(event.target===this)hidePairModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">Pair Players</div>
+    <div class="mf-counter" id="pair-counter"></div>
+    <label class="sticky-row" id="pair-sticky-row" style="margin-bottom:12px">
+      <input type="checkbox" id="pair-sticky" onchange="document.getElementById('pair-sticky-row').classList.toggle('on', this.checked)">
+      <span>🔒 LOCK pair — stay together all session</span>
+    </label>
+    <div id="pair-list"></div>
+    <div class="m-row" style="margin-top:4px">
+      <button class="m-btn cancel" onclick="hidePairModal()">Cancel</button>
+      <button class="m-btn ok" id="pair-confirm" onclick="submitPair()">Pair</button>
+    </div>
+  </div>
+</div>
+
+<!-- QR Modal -->
+<div class="overlay" id="qr-modal" onclick="if(event.target===this)closeModal('qr-modal')">
+  <div class="modal" style="text-align:center">
+    <div class="m-handle"></div>
+    <div class="m-title">Scan to Join</div>
+    <div class="m-sub" style="margin-bottom:20px" id="qr-url-sub"></div>
+    <div id="qr-canvas" style="display:flex;justify-content:center;margin-bottom:20px"></div>
+    <button class="m-cancel-full" onclick="closeModal('qr-modal')">Close</button>
+  </div>
+</div>
+
+<!-- Edit Level Modal -->
+<div class="overlay" id="lvl-modal" onclick="if(event.target===this)closeLvlModal()">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">Change Level</div>
+    <div class="m-sub" id="lvl-modal-sub"></div>
+    <div class="lvl-grid" id="lvl-modal-picker"></div>
+    <button class="m-cancel-full" onclick="closeLvlModal()">Cancel</button>
+  </div>
+</div>
+
+<!-- Stats Modal (admin) -->
+<div class="overlay" id="stats-modal" onclick="if(event.target===this)closeModal('stats-modal')">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">Session Stats</div>
+    <div id="stats-body" style="max-height:55vh;overflow-y:auto;-webkit-overflow-scrolling:touch"></div>
+    <div class="m-row" style="margin-top:12px">
+      <button class="m-btn cancel" onclick="exportGamesCsv()">⬇ Games CSV</button>
+      <button class="m-btn cancel" onclick="exportPlayersCsv()">⬇ Players CSV</button>
+    </div>
+    <button class="m-cancel-full" onclick="closeModal('stats-modal')">Close</button>
+  </div>
+</div>
+
+<!-- End Game Modal (optional score) -->
+<div class="overlay" id="end-modal" onclick="if(event.target===this)closeModal('end-modal')">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title" id="end-title">End Game</div>
+    <div class="m-sub">Record the score (optional), then re-queue players.</div>
+    <div id="end-teams"></div>
+    <div class="m-row">
+      <button class="m-btn cancel" onclick="closeModal('end-modal')">Cancel</button>
+      <button class="m-btn ok" onclick="confirmEnd()">End &amp; Re-queue</button>
+    </div>
+  </div>
+</div>
+
+<!-- Reset Confirm Modal -->
+<div class="overlay" id="reset-modal" onclick="if(event.target===this)closeModal('reset-modal')">
+  <div class="modal">
+    <div class="m-handle"></div>
+    <div class="m-title">Clear all data?</div>
+    <div class="m-sub">This removes everyone from the waitlist, On Deck and all courts, clears game history, and resets courts to 6–10. This cannot be undone.</div>
+    <div class="m-row">
+      <button class="m-btn cancel" onclick="closeModal('reset-modal')">Cancel</button>
+      <button class="m-btn danger" onclick="confirmReset()">Clear everything</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────
+const INITIAL_IDS = [6,7,8,9,10];
+let IDS = [6,7,8,9,10];
+const EXTRA_IDS = [1,2,3,4,5];
+const COURT_COLORS = { 1:'#c9b896', 2:'#8bb09c', 3:'#c5afce', 4:'#a8c5b5', 5:'#94a3b8', 6:'#6b9979', 7:'#847899', 8:'#b5a8c5', 9:'#9b8ba9', 10:'#7ba696' };
+function courtColor(id) { return COURT_COLORS[id] || '#94a3b8'; }
+const LEVELS = ['advanced','intermediate','novice','beginner'];
+const LEVEL_COLORS = { 'advanced':'#6b9979', 'intermediate':'#9b8ba9', 'novice':'#94a3b8', 'beginner':'#cbd5e1' };
+const SLOT_LABELS = ['7:00 – 7:30', '7:30 – 8:00', '8:00 – 8:30', '8:30 – 9:00'];
+const TRAINING_DURATION = 30 * 60 * 1000; // fallback; the server sends the real duration
+// Server-authoritative training slot length (30 min by default).
+function trainingDuration() {
+  const d = state?.training?.durationMs;
+  return Number.isFinite(d) && d > 0 ? d : TRAINING_DURATION;
+}
+const END_PAIRINGS = [[0,1,2,3],[0,2,1,3],[0,3,1,2]];
+
+// ── State ──────────────────────────────────────────────
+let state = { courts:{}, next:{}, queue:[], players:{}, pairs:{}, stickyPairs:{}, history:[], training:{slots:[]} };
+let currentUser = null;
+let isAdmin = false;
+let myName = '';
+let myLevel = '';
+let assigningPlayer = null;
+let promoteFromId = null;
+let endCourtId = null;
+let endPairingIdx = 0;
+let mfCourtId = null, mfType = 'court', mfSelected = new Set(), mfSpots = 0;
+let pairSelected = new Set();
+let modalLevel = '';
+let myPartner = null, partnerDropOpen = false;
+let mySticky = false;
+let adminAddMode = false;
+let editLvlName = null;
+let draggedName = null;
+let qrGenerated = false;
+let announceOn = false;
+let enVoice = null;
+const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
+let trainingReturned = new Set();
+
+// ── Socket ─────────────────────────────────────────────
+const socket = (typeof io !== 'undefined') ? io() : { emit(){}, on(){}, connect(){} };
+
+socket.on('state_update', s => { state = s; if (s.courtIds) IDS = s.courtIds; render(); });
+socket.on('connected_count', n => { const el = document.getElementById('online-count'); if (el) el.textContent = n; });
+socket.on('announce', ({ courtId, players }) => {
+  if (!announceOn || !players || !players.length) return;
+  speak(`Court ${courtId}, please come up: ${players.join(', ')}`);
+});
+socket.on('join_error', ({ reason, name }) => { if (reason==='name_taken') showNameError(`"${name}" is already in use. Please use a different name.`); });
+socket.on('join_success', ({ pairDeclined } = {}) => {
+  hideJoinModal();
+  if (pairDeclined) {
+    alert(`${pairDeclined.partner} is already paired with ${pairDeclined.pairedWith}. You joined the queue solo — ask an admin if the pairing needs to change.`);
+  }
+});
+socket.on('assign_error', ({ reason }) => { if (reason === 'no_space') showMfError('Not enough space to include the paired partner.'); });
+
+// ── Event activation / auto-join feedback ───────────────
+socket.on('activate_success', ({ title }) => {
+  flashEventBanner(`✅ ${title || 'Event'} activated — registrants loaded into the queue.`);
+});
+socket.on('activate_error', ({ reason }) => {
+  flashEventBanner(reason === 'not_found' ? '⚠ Event not found.' : '⚠ Activation failed.');
+});
+socket.on('auto_join_success', ({ name, partner }) => {
+  flashEventBanner(partner
+    ? `✅ You and ${partner} joined the queue.`
+    : '✅ You joined the queue.');
+});
+socket.on('auto_join_noop', () => {
+  // Already on the board — no banner needed.
+});
+socket.on('auto_join_error', ({ reason, activeTitle }) => {
+  if (reason === 'not_registered') {
+    flashEventBanner('⚠ You are not registered for this event.');
+  } else if (reason === 'event_not_active') {
+    flashEventBanner(activeTitle
+      ? `⚠ The board is currently showing "${activeTitle}". Ask admin to switch events.`
+      : '⚠ This event is not active on the board yet. Ask admin to activate it.');
+  } else if (reason === 'not_logged_in') {
+    window.location.href = '/login';
+  }
+});
+
+let eventBannerTimer = null;
+function flashEventBanner(msg) {
+  const el = document.getElementById('event-banner');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.display = '';
+  if (eventBannerTimer) clearTimeout(eventBannerTimer);
+  eventBannerTimer = setTimeout(() => {
+    eventBannerTimer = null;
+    renderEventBanner();
+  }, 6000);
+}
+
+// ── Auth (session-based) ───────────────────────────────
+async function initAuth() {
+  try {
+    const r = await fetch('/api/auth/me');
+    const u = await r.json();
+    if (!u) { window.location.href = '/login'; return; }
+    currentUser = u;
+    isAdmin = !!u.is_admin;
+    myName = u.display_name || '';
+    myLevel = u.level || '';
+    const infoEl = document.getElementById('user-info');
+    if (infoEl) infoEl.textContent = `Hi, ${myName} (${myLevel})`;
+    document.getElementById('dashboard-link').style.display = isAdmin ? '' : 'none';
+    document.getElementById('events-link').style.display = isAdmin ? 'none' : '';
+    render();
+
+    // ── Per-event deep-link: /board?eventId=X[&activate=1] ──
+    // Admin with activate=1 triggers activate_event (loads every registrant
+    // into the queue). Any logged-in user without activate=1 sends
+    // auto_join_event, which drops only themselves (and their partner) in.
+    const params = new URLSearchParams(location.search);
+    const eventId = params.get('eventId');
+    if (eventId) {
+      const evRes = await fetch(`/api/events/${eventId}`).then(r => r.json()).catch(() => null);
+      if (evRes && evRes.id) {
+        const banner = document.getElementById('event-banner');
+        banner.textContent = `🎟 ${evRes.title} · ${evRes.event_date}`;
+        banner.style.display = '';
+      }
+      if (params.get('activate') === '1' && isAdmin) {
+        socket.emit('activate_event', { eventId });
+      } else {
+        socket.emit('auto_join_event', { eventId });
+      }
+    }
+  } catch (e) {
+    window.location.href = '/login';
+  }
+}
+
+document.getElementById('logout').onclick = async (e) => {
+  e.preventDefault();
+  await fetch('/api/auth/logout', { method:'POST' });
+  window.location.href = '/login';
+};
+
+// ── Render ─────────────────────────────────────────────
+function render() {
+  renderHowto(); renderSummary(); renderCourts(); renderNext();
+  renderTraining(); renderQueue(); renderMyStatus(); renderAdminControls();
+  renderHistory(); updateTimers();
+  renderEventBanner();
+}
+
+// Keep the header event banner in sync with the server's activeEventTitle.
+// Skipped when initAuth is showing a one-shot flash message (it manages the
+// banner directly until it auto-hides).
+function renderEventBanner() {
+  const el = document.getElementById('event-banner');
+  if (!el || eventBannerTimer) return; // flash in progress — don't override
+  if (state.activeEventId && state.activeEventTitle) {
+    el.textContent = `🎟 ${state.activeEventTitle}`;
+    el.style.display = '';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function renderAdminControls() {
+  document.getElementById('history-sidebar').classList.toggle('visible', isAdmin);
+  document.getElementById('reset-btn').style.display = isAdmin ? '' : 'none';
+  document.getElementById('stats-btn').style.display = isAdmin ? '' : 'none';
+  document.getElementById('announce-btn').style.display = isAdmin ? '' : 'none';
+  document.getElementById('admin-add-btn').style.display = isAdmin ? '' : 'none';
+  document.getElementById('admin-pair-btn').style.display = isAdmin ? '' : 'none';
+  document.getElementById('join-sticky').style.display = isAdmin ? 'none' : '';
+  document.getElementById('dashboard-link').style.display = isAdmin ? '' : 'none';
+  document.getElementById('events-link').style.display = isAdmin ? 'none' : '';
+  renderAnnounceBtn();
+  document.querySelector('main').classList.toggle('admin-mode', isAdmin);
+  document.querySelector('.page-wrap').classList.toggle('admin-layout', isAdmin);
+}
+
+function renderHowto() {
+  const box = document.getElementById('howto');
+  if (isAdmin) { box.style.display = 'none'; return; }
+  box.style.display = '';
+  document.getElementById('howto-title').textContent = 'How to Play';
+  document.getElementById('howto-steps').innerHTML = `
+    <span class="howto-step">① Tap "Join Queue"</span><span class="howto-arrow">→</span>
+    <span class="howto-step">② Watch for your name in On Deck</span><span class="howto-arrow">→</span>
+    <span class="howto-step">③ Head to your court</span>`;
+}
+
+function renderSummary() {
+  const live  = IDS.filter(id => state.courts[id]?.playing).length;
+  const ready = IDS.filter(id => { const c = state.courts[id]; return !c?.playing && c?.players.length === 4; }).length;
+  const idle  = IDS.length - live - ready;
+  const q     = state.queue.length;
+  let html = '';
+  if (live)  html += `<span class="sec-chip on">● ${live} Live</span>`;
+  if (ready) html += `<span class="sec-chip">◎ ${ready} Ready</span>`;
+  if (idle)  html += `<span class="sec-chip">○ ${idle} Idle</span>`;
+  if (q && isAdmin) html += `<span class="sec-chip">⏳ ${q} in queue</span>`;
+  document.getElementById('court-summary').innerHTML = html;
+}
+
+function renderCourts() {
+  document.getElementById('courts-grid').innerHTML = IDS.map(buildCourt).join('');
+  const canAddMore = isAdmin && IDS.length < EXTRA_IDS.length + INITIAL_IDS.length;
+  document.getElementById('add-court-wrap').innerHTML = canAddMore
+    ? `<button class="sec-add-btn" onclick="addCourt()">＋ Court</button>` : '';
+}
+
+function renderNext() {
+  const staged = INITIAL_IDS.filter(id => state.next[id]?.players.length > 0);
+  let chips = staged.map(id => `<span class="sec-chip">⏳ #${INITIAL_IDS.indexOf(id)+1}: ${state.next[id].players.length}/4</span>`).join('');
+  document.getElementById('next-summary').innerHTML = chips;
+  document.getElementById('next-grid').innerHTML = INITIAL_IDS.map((id,i) => buildNextCourt(id, i+1)).join('');
+}
+
+function buildNextCourt(id, slot) {
+  const c = state.next[id];
+  if (!c) return '';
+  const count = c.players.length;
+  const canFill = count < 4 && state.queue.length > 0;
+
+  const cells = Array.from({length:4}, (_,i) => {
+    const p = c.players[i];
+    if (p) {
+      const me = p === myName;
+      return `<div class="p-cell filled${me?' me':''}"${isAdmin ? ` draggable="true" ondragstart="onDragStart(event,'${escJs(p)}')" ondragend="onDragEnd(event)" ondragover="onDragOverCell(event)" ondragleave="onDragLeave(event)" ondrop="onDropCell(event,'${escJs(p)}')"` : ''}>
+        <span class="p-name${me?' me':''}" style="max-width:52px" title="${esc(p)}">${esc(p)}</span>
+        ${lvlBadge(p, isAdmin)}
+        ${isAdmin ? `<button class="p-rm" onclick="removeFromNext(${id},'${escJs(p)}')">×</button>` : ''}
+      </div>`;
+    }
+    return `<div class="p-cell empty"><span class="p-empty-txt">Empty</span></div>`;
+  }).join('');
+
+  const undoBtn = (isAdmin && count > 0)
+    ? `<button class="c-btn c-undo" onclick="clearNext(${id})" title="Send these players back to the queue">↩ Undo</button>` : '';
+
+  let actions = '';
+  if (isAdmin) {
+    if (count === 4)
+      actions = `${undoBtn}<button class="c-btn fill" onclick="showPromoteModal(${id})">→ Send to Court</button>`;
+    else if (canFill)
+      actions = `${undoBtn}<button class="c-btn fill" style="opacity:0.85" onclick="socket.emit('fill_next',${id})">Auto</button><button class="c-btn eq" onclick="showMfModal(${id},'next')">Pick</button>`;
+    else if (count > 0)
+      actions = `${undoBtn}<button class="c-btn dim" disabled>Need more players</button>`;
+    else
+      actions = `<button class="c-btn dim" disabled>Waiting for players</button>`;
+  } else if (count < 4) {
+    actions = `<button class="c-btn dim" disabled>${count === 0 ? 'On Deck' : `${count}/4`}</button>`;
+  }
+
+  const dropAttrs = (isAdmin && count < 4) ? ` ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDropNext(event,${id})"` : '';
+  let badge = '⏳ Next';
+  if (isAdmin && count > 0) { const eta = onDeckEtaMin(id); if (eta != null) badge = eta <= 1 ? '≈ now' : `~${eta} min`; }
+  return `
+    <div class="court-card next-card"${dropAttrs}>
+      <div class="court-head">
+        <span class="court-name">On Deck ${slot}</span>
+        <span class="court-badge" title="Estimated wait for a court">${badge}</span>
+      </div>
+      <div class="p-grid">${cells}</div>
+      ${actions ? `<div class="c-actions">${actions}</div>` : ''}
+    </div>`;
+}
+
+function buildCourt(id) {
+  const c = state.courts[id];
+  if (!c) return '';
+  const count = c.players.length;
+  const full  = count === 4;
+  const statusLabel = full
+    ? (isAdmin
+        ? `⏱ <span class="court-timer" data-start="${c.startedAt || ''}">${c.startedAt ? fmtElapsed(Date.now() - c.startedAt) : '0:00'}</span>`
+        : '● Live')
+    : `${count}/4`;
+  const statusClass = (c.playing || full) ? 'live' : '';
+
+  const cells = Array.from({length:4}, (_,i) => {
+    const p = c.players[i];
+    if (p) {
+      const me = p === myName;
+      return `<div class="p-cell filled${me?' me':''}"${isAdmin ? ` draggable="true" ondragstart="onDragStart(event,'${escJs(p)}')" ondragend="onDragEnd(event)" ondragover="onDragOverCell(event)" ondragleave="onDragLeave(event)" ondrop="onDropCell(event,'${escJs(p)}')"` : ''}>
+        <span class="p-name${me?' me':''}" style="max-width:52px" title="${esc(p)}">${esc(p)}</span>
+        ${lvlBadge(p, isAdmin)}
+        ${isAdmin ? `<button class="p-rm" onclick="removeFromCourt(${id},'${escJs(p)}')">×</button>` : ''}
+      </div>`;
+    }
+    return `<div class="p-cell empty"><span class="p-empty-txt">Empty</span></div>`;
+  }).join('');
+
+  const hasCourtUndo = !!state.canUndoCourt?.[id];
+  let actions = '';
+  if (isAdmin) {
+    if (c.playing || full) {
+      const undoBtn = (!c.playing && hasCourtUndo) ? `<button class="c-btn c-undo" onclick="undoCourtAction(${id})">↩ Undo Send</button>` : '';
+      if (full && !c.startedAt) {
+        actions = `<button class="c-btn fill" onclick="startGame(${id})">▶ Start Game</button>${undoBtn}`;
+      } else {
+        actions = `${undoBtn}<button class="c-btn eq" onclick="showGameEndDialog(${id})">↩ End & Re-queue</button>`;
+      }
+    } else if (count === 0 && hasCourtUndo) {
+      actions = `<button class="c-btn c-undo" onclick="undoCourtAction(${id})">↩ Undo End</button>`;
+    } else {
+      actions = `<button class="c-btn dim" disabled>${count === 0 ? 'Waiting for players' : `${count}/4 – need more`}</button>`;
+    }
+  } else if (!c.playing && !full) {
+    actions = `<button class="c-btn dim" disabled>${count === 0 ? 'Waiting for players' : `${count}/4 – need more`}</button>`;
+  }
+
+  const canRemove = isAdmin && !c.playing && count === 0 && (state.next[id]?.players.length ?? 0) === 0;
+  const dropAttrs = (isAdmin && count < 4) ? ` ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDropCourt(event,${id})"` : '';
+  return `
+    <div class="court-card${(c.playing||full)?' live':''}"${dropAttrs}>
+      <div class="court-head">
+        <span class="court-name">Court ${id}</span>
+        <span class="court-badge ${statusClass}">${statusLabel}</span>
+        ${canRemove ? `<button class="court-rm-btn" onclick="removeCourt(${id})">−</button>` : ''}
+      </div>
+      <div class="p-grid">${cells}</div>
+      <div class="c-actions">${actions}</div>
+    </div>`;
+}
+
+// ── Training module ────────────────────────────────────
+function renderTraining() {
+  const section = document.getElementById('training-section');
+  const grid = document.getElementById('training-grid');
+  const slots = state.training?.slots;
+  if (!slots || !slots.length) { section.style.display = 'none'; return; }
+  section.style.display = '';
+  const now = Date.now();
+  grid.innerHTML = slots.map((slot, i) => {
+    // The server broadcasts slots as {players:[...], startedAt:ts|null}.
+    // Flat arrays (very old state) are tolerated and simply have no timer.
+    const players = Array.isArray(slot) ? slot : (slot.players || []);
+    const startedAt = Array.isArray(slot) ? null : slot.startedAt;
+    const remaining = startedAt ? Math.max(0, trainingDuration() - (now - startedAt)) : null;
+    const expired = remaining !== null && remaining <= 0;
+    const timerHtml = remaining !== null
+      ? `<span class="training-timer${expired?' expired':''}" data-training-timer="${i}">${formatTrainingTime(remaining)}</span>`
+      : `<span class="training-timer idle">—</span>`;
+    const playerHtml = players.length
+      ? players.map(name => `
+        <div class="training-player">
+          <span class="training-player-name" title="${esc(name)}">${esc(name)}</span>
+          ${lvlBadge(name, isAdmin)}
+          ${isAdmin ? `<button class="training-return-btn" onclick="returnFromTraining(${i},'${escJs(name)}')">↩ Queue</button>` : ''}
+        </div>`).join('')
+      : `<div class="training-empty">No players</div>`;
+    return `
+      <div class="training-card">
+        <div class="training-head">
+          <span class="training-time">${SLOT_LABELS[i] || `Slot ${i+1}`}</span>
+          ${timerHtml}
+        </div>
+        <div class="training-players">${playerHtml}</div>
+      </div>`;
+  }).join('');
+}
+
+function formatTrainingTime(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+function returnFromTraining(slot, name) {
+  if (!isAdmin) return;
+  socket.emit('training_return', { slot, name });
+}
+
+function checkTrainingTimers() {
+  const slots = state.training?.slots;
+  if (!slots) return;
+  const now = Date.now();
+  slots.forEach((slot, i) => {
+    // The server broadcasts {players, startedAt}; flat arrays are legacy.
+    const players = Array.isArray(slot) ? slot : (slot.players || []);
+    const startedAt = Array.isArray(slot) ? null : slot.startedAt;
+    if (!startedAt || !players.length) return;
+    const remaining = trainingDuration() - (now - startedAt);
+    if (remaining <= 0) {
+      const key = `${i}-${startedAt}`;
+      if (!trainingReturned.has(key)) {
+        trainingReturned.add(key);
+        players.forEach(name => {
+          socket.emit('training_auto_return', { slot: i, name });
+        });
+      }
+    }
+  });
+}
+
+// ── Wait-time estimate ─────────────────────────────────
+function avgGameMinutes() {
+  const durs = (state.history || []).filter(h => h.durationMs > 0).slice(0, 10).map(h => h.durationMs);
+  if (!durs.length) return 12;
+  return Math.max(4, (durs.reduce((a, b) => a + b, 0) / durs.length) / 60000);
+}
+
+function onDeckEtaMin(slotId) {
+  const filled = INITIAL_IDS.filter(id => (state.next[id]?.players.length || 0) > 0);
+  const k = filled.indexOf(slotId);
+  if (k < 0) return null;
+  const now = Date.now(), D = avgGameMinutes();
+  const courtTimes = IDS.map(id => {
+    const c = state.courts[id];
+    if (!c || c.players.length < 4) return 0;
+    const elapsed = c.startedAt ? (now - c.startedAt) / 60000 : D / 2;
+    return Math.max(0, D - elapsed);
+  }).sort((a, b) => a - b);
+  if (!courtTimes.length) return 0;
+  return Math.max(0, Math.round(courtTimes[Math.min(k, courtTimes.length - 1)]));
+}
+
+function renderQueue() {
+  const badge = document.getElementById('q-badge');
+  const list  = document.getElementById('q-list');
+  if (isAdmin) {
+    badge.style.display = '';
+    badge.textContent = `${state.queue.length} players`;
+  } else {
+    badge.style.display = 'none';
+  }
+  if (!state.queue.length) {
+    list.innerHTML = `<div class="q-empty"><div class="q-empty-icon">🏸</div><div>No one waiting</div><div class="q-empty-hint">Tap "Join Queue" to start</div></div>`;
+    return;
+  }
+  const avail = IDS.filter(id => state.courts[id]?.players.length < 4);
+  list.innerHTML = `<div class="q-list">` + state.queue.map((name, i) => {
+    const me = name === myName;
+    const partner = state.pairs?.[name];
+    const dragAttrs = isAdmin ? ` draggable="true" ondragstart="onDragStart(event,'${escJs(name)}')" ondragend="onDragEnd(event)"` : '';
+    return `<div class="q-item${me?' me':''}"${dragAttrs}>
+      ${isAdmin ? `<span class="q-pos${i<4?' next':''}">${i+1}</span>` : ''}
+      <span class="q-name${me?' me':''}" title="${esc(name)}">${esc(name)}${me?' ★':''}</span>
+      ${lvlBadge(name, isAdmin)}
+      ${pairBadgeHtml(name)}
+      <div class="q-actions">
+        ${isAdmin && partner ? `<button class="q-rm-btn" onclick="socket.emit('unlink_pair','${escJs(name)}')" title="Break pair" style="font-size:14px">✂️</button>` : ''}
+        ${isAdmin && avail.length ? `<button class="q-assign-btn" onclick="showAssignModal('${escJs(name)}')" title="Assign to court">⬆</button>` : ''}
+        ${isAdmin || name === myName ? `<button class="q-rm-btn" onclick="removeFromQueue('${escJs(name)}')" title="Remove">×</button>` : ''}
+      </div>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+function renderMyStatus() {
+  const el = document.getElementById('my-status');
+  if (!el) return;
+  if (!myName) { el.innerHTML = `<span style="color:rgba(255,255,255,0.45);font-size:12px;cursor:pointer" onclick="showJoinModal()">Tap to register</span>`; return; }
+  const onCourt = IDS.find(id => state.courts[id]?.players.includes(myName));
+  const onDeck  = IDS.find(id => state.next[id]?.players.includes(myName));
+  const qPos    = state.queue.indexOf(myName);
+  if (onCourt)     el.innerHTML = `<span style="color:#a8c5b5;font-size:12px">✓ Court ${onCourt}</span>`;
+  else if (onDeck) { const eta = isAdmin ? onDeckEtaMin(onDeck) : null;
+                     el.innerHTML = `<span style="color:#c5afce;font-size:12px">⏳ On Deck ${INITIAL_IDS.indexOf(onDeck)+1}${eta!=null ? (eta<=1?' · ≈ now':' · ~'+eta+' min') : ''}</span>`; }
+  else if (qPos>=0)el.innerHTML = `<span style="color:#cbd5e1;font-size:12px">Queue #${qPos+1}</span>`;
+  else             el.innerHTML = `<span style="color:rgba(255,255,255,0.5);font-size:12px">${esc(myName)}</span>`;
+}
+
+// ── History ───────────────────────────────────────────
+function renderHistory() {
+  const list = document.getElementById('history-list');
+  const history = state.history || [];
+  if (!history.length) {
+    list.innerHTML = `<div class="history-empty"><div class="history-empty-icon">🏸</div><div>No games completed yet</div></div>`;
+    return;
+  }
+  list.innerHTML = history.map(h => {
+    const mins = Math.round((Date.now() - h.time) / 60000);
+    const timeStr = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins/60)}h ${mins%60}m ago`;
+    const players = h.players || [];
+    let body;
+    if (h.score && players.length === 4) {
+      const t1 = [players[0], players[1]], t2 = [players[2], players[3]];
+      const aWin = h.score.a > h.score.b, bWin = h.score.b > h.score.a;
+      const teamRow = (names, val, win) => `
+        <div class="history-team${win?' win':''}">
+          <span class="history-team-names">${names.map(p => `${lvlBadge(p)} ${esc(p)}`).join(' & ')}</span>
+          <span class="history-score">${val}${win?' 🏆':''}</span>
+        </div>`;
+      body = teamRow(t1, h.score.a, aWin) + teamRow(t2, h.score.b, bWin);
+    } else {
+      body = `<div class="history-players">${players.map(p => `<div class="history-player">${lvlBadge(p)} ${esc(p)}</div>`).join('')}</div>`;
+    }
+    return `<div class="history-item">
+      <div class="history-meta">
+        <span class="history-court-dot" style="background:${courtColor(h.courtId)}"></span>
+        Court ${h.courtId} · ${timeStr}${h.durationMs ? ` · ⏱ ${fmtDuration(h.durationMs)}` : ''}
+      </div>
+      ${body}
+    </div>`;
+  }).join('');
+}
+
+// ── Level helpers ──────────────────────────────────────
+function lvlBadge(name, editable = false) {
+  const lvl = state.players?.[name];
+  if (!lvl) return '';
+  if (editable && isAdmin)
+    return `<span class="level-dot ${lvl} editable" title="Edit level: ${lvl}" onclick="showLvlModal('${escJs(name)}')"></span>`;
+  return `<span class="level-dot ${lvl}" title="${lvl}"></span>`;
+}
+
+// ── Pair badge helpers ─────────────────────────────────
+function pairKeyOf(a, b) { return JSON.stringify([a, b].sort()); }
+function isStickyPair(a, b) { return !!state.stickyPairs?.[pairKeyOf(a, b)]; }
+function pairBadgeHtml(name) {
+  const partner = state.pairs?.[name];
+  if (!partner) return '';
+  const sticky = isStickyPair(name, partner);
+  const tip = sticky ? 'LOCK-paired all session' : 'Paired — auto-unbinds after first game';
+  return `<span class="pair-badge ${sticky ? 'sticky' : 'casual'}" title="${esc(partner)} · ${tip}">${sticky ? '🔒' : '🔗'} ${esc(partner)}</span>`;
+}
+
+function renderLvlPicker() {
+  document.getElementById('lvl-picker').innerHTML = LEVELS.map(l => {
+    const col = LEVEL_COLORS[l]; const sel = l === modalLevel;
+    return `<button class="lvl-btn${sel?' sel':''}" style="${sel?`background:${col};`:''}color:${sel?'white':col}" onclick="selectLevel('${l}')">${l}</button>`;
+  }).join('');
+}
+
+function selectLevel(l) {
+  modalLevel = l;
+  const lbl = document.querySelector('#join-modal .lvl-section-label');
+  if (lbl) lbl.style.color = '';
+  const picker = document.getElementById('lvl-picker');
+  if (picker) { picker.style.outline = ''; picker.style.borderRadius = ''; }
+  renderLvlPicker();
+}
+
+// ── Join ───────────────────────────────────────────────
+function renderStickyToggle() {
+  document.getElementById('sticky-wrap').style.display = myPartner ? '' : 'none';
+  const input = document.getElementById('sticky-input');
+  input.checked = mySticky;
+  document.getElementById('sticky-row').classList.toggle('on', mySticky);
+}
+function onStickyToggle() {
+  mySticky = document.getElementById('sticky-input').checked;
+  document.getElementById('sticky-row').classList.toggle('on', mySticky);
+}
+
+function renderPartnerSelector() {
+  const sel  = document.getElementById('partner-selector');
+  const list = document.getElementById('partner-list');
+  sel.className = 'partner-selector' + (myPartner?' chosen':'') + (partnerDropOpen?' open':'');
+  sel.innerHTML = myPartner
+    ? `<span>👥 ${esc(myPartner)}</span><span class="partner-chevron">▾</span>`
+    : `<span>Select a partner...</span><span class="partner-chevron">▾</span>`;
+  list.style.display = partnerDropOpen ? '' : 'none';
+  if (!partnerDropOpen) { list.innerHTML = ''; return; }
+  list.innerHTML = `
+    <input class="partner-search" id="partner-search" type="text" placeholder="🔍 Search name..."
+           autocomplete="off" autocorrect="off" spellcheck="false"
+           oninput="renderPartnerItems()" onclick="event.stopPropagation()">
+    <div id="partner-items"></div>`;
+  renderPartnerItems();
+  setTimeout(() => { const s = document.getElementById('partner-search'); if (s) s.focus(); }, 0);
+}
+
+function renderPartnerItems() {
+  const cont = document.getElementById('partner-items');
+  if (!cont) return;
+  const searchEl = document.getElementById('partner-search');
+  const q = (searchEl ? searchEl.value : '').trim().toLowerCase();
+  const myNameVal = document.getElementById('name-input').value.trim();
+  let others = state.queue.filter(n => n !== myNameVal);
+  if (q) others = others.filter(n => n.toLowerCase().includes(q));
+  cont.innerHTML = others.length
+    ? others.map(n => {
+        const taken = state.pairs?.[n];
+        if (taken) {
+          const sticky = isStickyPair(n, taken);
+          return `<div class="partner-item disabled" style="opacity:0.45;cursor:default">
+            <span class="partner-item-name">${esc(n)} <span style="color:var(--n-400);font-weight:500;font-size:12px">· already paired</span></span>
+            <span style="font-size:11px;font-weight:700;color:var(--n-400)">${sticky ? '🔒' : '🔗'} ${esc(taken)}</span>
+          </div>`;
+        }
+        return `<div class="partner-item" onclick="selectPartner('${escJs(n)}')"><span class="partner-item-name">${esc(n)}</span>${lvlBadge(n)}</div>`;
+      }).join('')
+    : `<div class="partner-item"><span class="partner-none">${q ? 'No match' : 'No one in queue yet'}</span></div>`;
+}
+
+function togglePartnerDrop() { partnerDropOpen = !partnerDropOpen; renderPartnerSelector(); }
+function selectPartner(name) { myPartner = name; partnerDropOpen = false; renderPartnerSelector(); renderStickyToggle(); }
+
+function showJoinModal(adminAdd = false) {
+  adminAddMode = !!adminAdd;
+  document.getElementById('name-input').value = adminAddMode ? '' : (myName || '');
+  modalLevel = adminAddMode ? '' : (myLevel || '');
+  myPartner = null; partnerDropOpen = false; mySticky = false;
+  document.getElementById('join-title').textContent = adminAddMode ? 'Add Player' : 'Join Queue';
+  document.getElementById('join-sub').textContent   = adminAddMode ? 'Add someone to the waitlist' : 'Enter your name to join';
+  clearNameError();
+  renderLvlPicker(); renderPartnerSelector(); renderStickyToggle();
+  openModal('join-modal');
+  setTimeout(() => document.getElementById('name-input').focus(), 250);
+}
+function hideJoinModal() { closeModal('join-modal'); }
+function submitJoin() {
+  const inp = document.getElementById('name-input');
+  const name = inp.value.trim();
+  if (!name) { inp.focus(); return; }
+  if (!modalLevel) {
+    const lbl = document.querySelector('#join-modal .lvl-section-label');
+    lbl.style.color = '#c45555';
+    document.getElementById('lvl-picker').style.outline = '2px solid #c45555';
+    document.getElementById('lvl-picker').style.borderRadius = '6px';
+    return;
+  }
+  if (!adminAddMode) {
+    myName = name;
+    myLevel = modalLevel;
+  }
+  socket.emit('join_queue', { name, level: modalLevel, partner: myPartner || '', sticky: !!(myPartner && mySticky) });
+}
+
+// ── Assign ─────────────────────────────────────────────
+function showAssignModal(name) {
+  assigningPlayer = name;
+  document.getElementById('assign-sub').textContent = `Assign court for ${name}`;
+  const avail = IDS.filter(id => state.courts[id]?.players.length < 4);
+  document.getElementById('assign-courts').innerHTML = avail.map(id => {
+    const spots = 4 - state.courts[id].players.length;
+    return `<button class="court-opt" style="background:${courtColor(id)}" onclick="doAssign(${id})"><span>Court ${id}</span><span class="court-opt-spots">${spots} spots left</span></button>`;
+  }).join('');
+  openModal('assign-modal');
+}
+function hideAssignModal() { closeModal('assign-modal'); assigningPlayer = null; promoteFromId = null; }
+
+function showPromoteModal(fromId) {
+  promoteFromId = fromId; assigningPlayer = null;
+  const empty = IDS.filter(id => state.courts[id]?.players.length === 0 && !state.courts[id]?.playing);
+  document.getElementById('assign-sub').textContent = `Select empty court for On-Deck ${INITIAL_IDS.indexOf(fromId)+1}`;
+  document.getElementById('assign-courts').innerHTML = empty.length
+    ? empty.map(id => `<button class="court-opt" style="background:${courtColor(id)}" onclick="doPromote(${id})"><span>Court ${id}</span><span class="court-opt-spots">Empty</span></button>`).join('')
+    : `<p style="text-align:center;color:var(--n-400);padding:16px 0">No empty courts</p>`;
+  openModal('assign-modal');
+}
+function doPromote(toCourtId) { if (!promoteFromId) return; socket.emit('promote_next', { fromCourtId:promoteFromId, toCourtId }); hideAssignModal(); }
+function doAssign(courtId)    { if (!assigningPlayer) return; socket.emit('assign_player', { courtId, name:assigningPlayer }); hideAssignModal(); }
+
+// ── Manual Fill ────────────────────────────────────────
+function showMfModal(courtId, type = 'court') {
+  mfCourtId = courtId; mfType = type; mfSelected = new Set();
+  const src = type === 'next' ? state.next[courtId] : state.courts[courtId];
+  mfSpots = 4 - (src?.players.length || 0);
+  document.getElementById('mf-title').textContent = type === 'next' ? `On Deck – Court ${courtId}` : `Pick Players – Court ${courtId}`;
+  renderMfList(); openModal('mf-modal');
+}
+function hideMfModal() { closeModal('mf-modal'); }
+
+function toggleMf(name) {
+  if (mfSelected.has(name)) mfSelected.delete(name);
+  else if (mfSelected.size < mfSpots) mfSelected.add(name);
+  renderMfList();
+}
+
+function renderMfList() {
+  const err = document.getElementById('mf-error'); if (err) err.style.display = 'none';
+  const remaining = mfSpots - mfSelected.size;
+  document.getElementById('mf-counter').innerHTML = `Select <span>${remaining}</span> more player${remaining!==1?'s':''}`;
+  document.getElementById('mf-confirm').disabled = mfSelected.size === 0;
+  document.getElementById('mf-list').innerHTML = state.queue.map(name => {
+    const sel = mfSelected.has(name); const full = !sel && mfSelected.size >= mfSpots;
+    return `<div class="mf-item${sel?' sel':''}${full?' disabled':''}" onclick="${full?'':'toggleMf(\''+escJs(name)+'\')'}">
+      <div class="mf-check">${sel?'✓':''}</div>
+      <span class="mf-name">${esc(name)}</span>
+      ${lvlBadge(name)}
+      ${pairBadgeHtml(name)}
+    </div>`;
+  }).join('');
+}
+
+function submitMf() {
+  if (!mfCourtId || mfSelected.size === 0) return;
+  const src = mfType === 'next' ? state.next[mfCourtId] : state.courts[mfCourtId];
+  if (!src) return;
+  const spots = 4 - src.players.length;
+  const occupied = new Set(src.players);
+  const expanded = new Set();
+  for (const n of mfSelected) {
+    expanded.add(n);
+    const p = state.pairs?.[n];
+    if (p && state.queue.includes(p) && !occupied.has(p)) expanded.add(p);
+  }
+  if (expanded.size > spots) {
+    showMfError(`Not enough space — this includes a paired partner (needs ${expanded.size}, ${spots} left). Free a slot or unpair first.`);
+    return;
+  }
+  socket.emit(mfType === 'next' ? 'manual_assign_next' : 'manual_assign', { courtId:mfCourtId, names:[...mfSelected] });
+  hideMfModal();
+}
+function showMfError(msg) { const e = document.getElementById('mf-error'); if (e) { e.textContent = msg; e.style.display = 'block'; } }
+
+// ── Pair players (admin) ───────────────────────────────
+function showPairModal() {
+  if (!isAdmin) return;
+  pairSelected = new Set();
+  const sticky = document.getElementById('pair-sticky');
+  sticky.checked = false;
+  document.getElementById('pair-sticky-row').classList.remove('on');
+  renderPairList();
+  openModal('pair-modal');
+}
+function hidePairModal() { closeModal('pair-modal'); }
+function togglePair(name) {
+  if (pairSelected.has(name)) pairSelected.delete(name);
+  else if (pairSelected.size < 2) pairSelected.add(name);
+  renderPairList();
+}
+function renderPairList() {
+  const remaining = 2 - pairSelected.size;
+  document.getElementById('pair-counter').innerHTML = remaining > 0
+    ? `Select <span>${remaining}</span> player${remaining !== 1 ? 's' : ''} to pair`
+    : `Ready to pair`;
+  document.getElementById('pair-confirm').disabled = pairSelected.size !== 2;
+  if (!state.queue.length) {
+    document.getElementById('pair-list').innerHTML = `<div class="stat-empty">No one waiting</div>`;
+    return;
+  }
+  document.getElementById('pair-list').innerHTML = state.queue.map(name => {
+    const sel = pairSelected.has(name); const full = !sel && pairSelected.size >= 2;
+    return `<div class="mf-item${sel?' sel':''}${full?' disabled':''}" onclick="${full?'':`togglePair('${escJs(name)}')`}">
+      <div class="mf-check">${sel?'✓':''}</div>
+      <span class="mf-name">${esc(name)}</span>
+      ${lvlBadge(name)}
+      ${pairBadgeHtml(name)}
+    </div>`;
+  }).join('');
+}
+function submitPair() {
+  if (pairSelected.size !== 2) return;
+  const [a, b] = [...pairSelected];
+  const sticky = document.getElementById('pair-sticky').checked;
+  socket.emit('pair_players', { a, b, sticky });
+  hidePairModal();
+}
+
+// ── Actions ────────────────────────────────────────────
+function clearNext(courtId)      { socket.emit('clear_next', courtId); }
+function undoCourtAction(courtId){ socket.emit('undo_court_action', courtId); }
+function addCourt()              { socket.emit('add_court'); }
+function removeCourt(courtId)    { socket.emit('remove_court', courtId); }
+function endGame(courtId,toQueue){ socket.emit('end_game', { courtId, toQueue }); }
+function startGame(courtId)      { socket.emit('start_game', { courtId }); }
+
+// ── End-game modal (showGameEndDialog) ─────────────────
+function showGameEndDialog(courtId) {
+  endCourtId = Number(courtId);
+  const players = state.courts[endCourtId]?.players || [];
+  if (players.length < 4) { endGame(endCourtId, true); return; }
+  endPairingIdx = 0;
+  document.getElementById('end-title').textContent = `End Game — Court ${endCourtId}`;
+  renderEndModal();
+  openModal('end-modal');
+}
+
+function setEndPairing(idx) {
+  const a = document.getElementById('end-score-a')?.value ?? '';
+  const b = document.getElementById('end-score-b')?.value ?? '';
+  endPairingIdx = idx;
+  renderEndModal(a, b);
+}
+
+function renderEndModal(scoreA = '', scoreB = '') {
+  const players = state.courts[endCourtId]?.players || [];
+  if (players.length < 4) return;
+  const opts = END_PAIRINGS.map((pr, idx) => {
+    const [i,j,k,l] = pr;
+    return `<button type="button" class="end-opt${idx===endPairingIdx?' sel':''}" onclick="setEndPairing(${idx})">
+      ${esc(players[i])} + ${esc(players[j])}<span class="end-opt-vs">vs</span>${esc(players[k])} + ${esc(players[l])}
+    </button>`;
+  }).join('');
+  const [i,j,k,l] = END_PAIRINGS[endPairingIdx];
+  const teamRow = (names, side, val) => `
+    <div class="end-team">
+      <span class="end-team-names">${names.map(p => `${lvlBadge(p)} ${esc(p)}`).join(' & ')}</span>
+      <input class="end-score" id="end-score-${side}" type="number" inputmode="numeric" min="0" max="99" placeholder="–" autocomplete="off" value="${esc(val)}">
+    </div>`;
+  document.getElementById('end-teams').innerHTML =
+    `<div class="end-opt-label">Pick teams</div><div class="end-opts">${opts}</div>` +
+    teamRow([players[i],players[j]], 'a', scoreA) +
+    `<div class="end-vs">vs</div>` +
+    teamRow([players[k],players[l]], 'b', scoreB);
+}
+
+function confirmEnd() {
+  if (endCourtId == null) return;
+  const a = (document.getElementById('end-score-a')?.value || '').trim();
+  const b = (document.getElementById('end-score-b')?.value || '').trim();
+  const score = (a !== '' && b !== '') ? { a: Number(a), b: Number(b) } : null;
+  const players = state.courts[endCourtId]?.players || [];
+  let teams = null;
+  if (players.length === 4) {
+    const [i,j,k,l] = END_PAIRINGS[endPairingIdx];
+    teams = [[players[i], players[j]], [players[k], players[l]]];
+  }
+  socket.emit('end_game', { courtId: endCourtId, toQueue: true, score, teams });
+  closeModal('end-modal'); endCourtId = null;
+}
+function removeFromCourt(courtId,name){ socket.emit('remove_from_court', { courtId, name }); }
+function removeFromQueue(name)   { socket.emit('remove_from_queue', name); }
+function removeFromNext(courtId,name) { socket.emit('remove_from_next', { courtId, name }); }
+
+// ── Drag & drop (admin only) ──────────────────────────
+function onDragStart(e, name) {
+  if (!isAdmin) return;
+  draggedName = name;
+  e.dataTransfer.effectAllowed = 'move';
+  try { e.dataTransfer.setData('text/plain', name); } catch (_) {}
+  e.currentTarget.classList.add('dragging');
+}
+function onDragEnd(e) {
+  draggedName = null;
+  e.currentTarget.classList.remove('dragging');
+  clearDragHighlights();
+}
+function clearDragHighlights() {
+  document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+  document.querySelectorAll('.cell-drop').forEach(el => el.classList.remove('cell-drop'));
+}
+function onDragOver(e) {
+  if (!isAdmin || !draggedName) return;
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  e.currentTarget.classList.add('drag-over');
+}
+function onDragOverCell(e) {
+  if (!isAdmin || !draggedName) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.dataTransfer.dropEffect = 'move';
+  const card = e.currentTarget.closest('.court-card');
+  if (card) card.classList.remove('drag-over');
+  e.currentTarget.classList.add('cell-drop');
+}
+function onDropCell(e, targetName) {
+  if (!isAdmin || !draggedName) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const a = draggedName;
+  if (a && targetName && a !== targetName) socket.emit('swap_players', { a, b: targetName });
+  draggedName = null;
+  clearDragHighlights();
+}
+function onDragLeave(e) {
+  if (!e.currentTarget.contains(e.relatedTarget)) {
+    e.currentTarget.classList.remove('drag-over');
+    e.currentTarget.classList.remove('cell-drop');
+  }
+}
+function onDropCourt(e, courtId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const name = draggedName || e.dataTransfer.getData('text/plain');
+  if (name) socket.emit('move_player', { name, toType: 'court', toId: courtId });
+  draggedName = null;
+}
+function onDropNext(e, courtId) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const name = draggedName || e.dataTransfer.getData('text/plain');
+  if (name) socket.emit('move_player', { name, toType: 'next', toId: courtId });
+  draggedName = null;
+}
+function onDropQueue(e) {
+  if (!isAdmin || !draggedName) return;
+  e.preventDefault();
+  e.currentTarget.classList.remove('drag-over');
+  const name = draggedName || e.dataTransfer.getData('text/plain');
+  if (name) socket.emit('move_player', { name, toType: 'queue' });
+  draggedName = null;
+}
+
+// ── Reset all data (admin) ─────────────────────────────
+function showResetModal() { if (isAdmin) openModal('reset-modal'); }
+function confirmReset()    { socket.emit('reset_all'); closeModal('reset-modal'); }
+
+// ── Session stats (admin) ──────────────────────────────
+function computeStats() {
+  const stats = {};
+  (state.history || []).forEach(h => {
+    const players = h.players || [];
+    players.forEach(p => { (stats[p] = stats[p] || { games:0, wins:0, losses:0 }).games++; });
+    if (h.score && players.length === 4) {
+      const t1 = [players[0], players[1]], t2 = [players[2], players[3]];
+      if (h.score.a > h.score.b)      { t1.forEach(p => stats[p].wins++);   t2.forEach(p => stats[p].losses++); }
+      else if (h.score.b > h.score.a) { t2.forEach(p => stats[p].wins++);   t1.forEach(p => stats[p].losses++); }
+    }
+  });
+  return stats;
+}
+
+function showStatsModal() { if (!isAdmin) return; renderStats(); openModal('stats-modal'); }
+
+function renderStats() {
+  const now = Date.now();
+  const qs = state.queuedSince || {};
+  const waiting = state.queue.map(n => ({ n, since: qs[n] || now })).sort((a, b) => a.since - b.since);
+  const waitHtml = waiting.length
+    ? waiting.map(w => `<div class="stat-row"><span class="stat-name">${lvlBadge(w.n)} ${esc(w.n)}</span><span class="stat-val">${fmtDuration(now - w.since)}</span></div>`).join('')
+    : `<div class="stat-empty">No one waiting</div>`;
+
+  const stats = computeStats();
+  const players = Object.keys(stats).sort((a, b) =>
+    stats[b].games - stats[a].games || stats[b].wins - stats[a].wins || a.localeCompare(b));
+  const playersHtml = players.length
+    ? `<div class="stat-row stat-head"><span class="stat-name">Player</span><span class="stat-cols"><span>G</span><span>W</span><span>L</span></span></div>` +
+      players.map(p => { const s = stats[p];
+        return `<div class="stat-row"><span class="stat-name">${lvlBadge(p)} ${esc(p)}</span><span class="stat-cols"><span>${s.games}</span><span>${s.wins}</span><span>${s.losses}</span></span></div>`;
+      }).join('')
+    : `<div class="stat-empty">No games completed yet</div>`;
+
+  document.getElementById('stats-body').innerHTML =
+    `<div class="stat-section-title">⏳ Waiting longest</div>${waitHtml}` +
+    `<div class="stat-section-title" style="margin-top:16px">🏸 Players <span style="font-weight:600;color:var(--n-400)">(W/L from scored games)</span></div>${playersHtml}`;
+}
+
+// ── CSV export ─────────────────────────────────────────
+function csvCell(v) { v = String(v == null ? '' : v); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+function downloadCsv(filename, rows) {
+  const csv = rows.map(r => r.map(csvCell).join(',')).join('\r\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function dateStamp() { const d = new Date(); const p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth()+1)}${p(d.getDate())}`; }
+function exportPlayersCsv() {
+  const stats = computeStats();
+  const rows = [['Name', 'Level', 'Games', 'Wins', 'Losses', 'Win%']];
+  Object.keys(stats).sort((a, b) => stats[b].games - stats[a].games || a.localeCompare(b)).forEach(p => {
+    const s = stats[p], decided = s.wins + s.losses;
+    rows.push([p, state.players[p] || '', s.games, s.wins, s.losses, decided ? Math.round(100 * s.wins / decided) + '%' : '']);
+  });
+  downloadCsv(`n1-players-${dateStamp()}.csv`, rows);
+}
+function exportGamesCsv() {
+  const rows = [['Time', 'Court', 'Team 1', 'Team 2', 'Score', 'Duration(min)']];
+  (state.history || []).forEach(h => {
+    const p = h.players || [];
+    const t1 = p.length === 4 ? `${p[0]} & ${p[1]}` : p.join(' ');
+    const t2 = p.length === 4 ? `${p[2]} & ${p[3]}` : '';
+    rows.push([
+      new Date(h.time).toLocaleString(), h.courtId, t1, t2,
+      h.score ? `${h.score.a}-${h.score.b}` : '',
+      h.durationMs ? Math.round(h.durationMs / 60000) : ''
+    ]);
+  });
+  downloadCsv(`n1-games-${dateStamp()}.csv`, rows);
+}
+
+// ── Voice announcements (admin host device) ───────────
+function pickEnVoice() {
+  if (!ttsSupported) return;
+  const voices = speechSynthesis.getVoices() || [];
+  enVoice = voices.find(v => /^en[-_]US/i.test(v.lang)) || voices.find(v => /^en/i.test(v.lang)) || null;
+}
+
+function setupTTS() {
+  if (!ttsSupported) return;
+  pickEnVoice();
+  speechSynthesis.onvoiceschanged = pickEnVoice;
+}
+
+function speak(text) {
+  if (!ttsSupported || !announceOn) return;
+  try {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'en-US';
+    if (enVoice) u.voice = enVoice;
+    u.rate = 1.0; u.pitch = 1.0;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+function toggleAnnounce() {
+  if (!isAdmin) return;
+  if (!ttsSupported) { alert('This browser does not support voice announcements'); return; }
+  announceOn = !announceOn;
+  try { speechSynthesis.cancel(); } catch (e) {}
+  if (announceOn) { speak('Announcements on'); }
+  renderAnnounceBtn();
+}
+
+function renderAnnounceBtn() {
+  const btn = document.getElementById('announce-btn');
+  if (!btn) return;
+  btn.textContent = announceOn ? '🔊 Announcing' : '🔇 Announce';
+  btn.classList.toggle('on', announceOn);
+}
+
+// ── Edit Level Modal ──────────────────────────────────
+function showLvlModal(name) { editLvlName=name; document.getElementById('lvl-modal-sub').textContent=`Change level for ${name}`; renderLvlModalPicker(); openModal('lvl-modal'); }
+function closeLvlModal() { closeModal('lvl-modal'); editLvlName=null; }
+function renderLvlModalPicker() {
+  const current = state.players[editLvlName] || '';
+  document.getElementById('lvl-modal-picker').innerHTML = LEVELS.map(l => {
+    const col = LEVEL_COLORS[l]; const sel = l === current;
+    return `<button class="lvl-btn${sel?' sel':''}" style="${sel?`background:${col};`:''}color:${sel?'white':col}" onclick="setPlayerLevel('${l}')">${l}</button>`;
+  }).join('');
+}
+function setPlayerLevel(level) { if (!editLvlName) return; socket.emit('set_player_level', { name:editLvlName, level }); closeLvlModal(); }
+
+// ── Modal helpers ──────────────────────────────────────
+function openModal(id)  { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// ── QR ─────────────────────────────────────────────────
+function showQrModal() {
+  openModal('qr-modal');
+  const subEl = document.getElementById('qr-url-sub');
+  const url = window.location.origin;
+  if (subEl) subEl.textContent = url;
+  if (!qrGenerated) {
+    const container = document.getElementById('qr-canvas');
+    if (typeof QRCode === 'undefined') {
+      container.innerHTML = '<p style="color:var(--n-400);font-size:13px">QR library not loaded</p>';
+      qrGenerated = true;
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    container.innerHTML = '';
+    container.appendChild(canvas);
+    QRCode.toCanvas(canvas, url, {
+      width: 200, margin: 1, color: { dark: '#243528', light: '#ffffff' }
+    }, function(error) { if (error) console.error('QR error:', error); });
+    qrGenerated = true;
+  }
+}
+
+// ── Timers ─────────────────────────────────────────────
+function fmtElapsed(ms) {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+function fmtDuration(ms) {
+  const m = Math.max(0, Math.round(ms / 60000));
+  if (m < 1) return '<1m';
+  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+}
+function updateTimers() {
+  const now = Date.now();
+  document.querySelectorAll('.court-timer').forEach(el => {
+    const start = Number(el.getAttribute('data-start'));
+    if (start) el.textContent = fmtElapsed(now - start);
+  });
+  // Training timers
+  const slots = state.training?.slots;
+  if (slots) {
+    slots.forEach((slot, i) => {
+      const el = document.querySelector(`[data-training-timer="${i}"]`);
+      const startedAt = Array.isArray(slot) ? null : slot.startedAt;
+      if (el && startedAt) {
+        const remaining = Math.max(0, trainingDuration() - (now - startedAt));
+        el.textContent = formatTrainingTime(remaining);
+        el.classList.toggle('expired', remaining <= 0);
+      }
+    });
+    checkTrainingTimers();
+  }
+}
+setInterval(updateTimers, 1000);
+
+// ── Utils ──────────────────────────────────────────────
+function esc(s)   { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escJs(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function showNameError(msg) { const el=document.getElementById('name-error'); el.textContent=msg; el.style.display='block'; document.getElementById('name-input').style.borderColor='#c45555'; document.getElementById('name-input').focus(); }
+function clearNameError()   { const el=document.getElementById('name-error'); if (el) el.style.display='none'; const inp=document.getElementById('name-input'); if (inp) inp.style.borderColor=''; }
+
+// ── Header height ──────────────────────────────────────
+function updateHeaderHeight() {
+  const h = document.querySelector('header')?.offsetHeight || 70;
+  document.documentElement.style.setProperty('--header-h', h + 'px');
+}
+updateHeaderHeight();
+window.addEventListener('resize', updateHeaderHeight);
+window.addEventListener('load', updateHeaderHeight);
+const _headerEl = document.querySelector('header');
+if (window.ResizeObserver && _headerEl) new ResizeObserver(updateHeaderHeight).observe(_headerEl);
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(updateHeaderHeight);
+
+// ── Init ───────────────────────────────────────────────
+setupTTS();
+initAuth();
+</script>
+</body>
+</html>

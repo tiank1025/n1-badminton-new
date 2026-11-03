@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N1 Badminton — Login</title>
+  <link rel="stylesheet" href="/common.css">
+  <style>
+    body { display:flex; align-items:center; justify-content:center; padding:20px; }
+    .login-card { background:var(--card); border-radius:24px; box-shadow:var(--shadow-lg); width:100%; max-width:380px; overflow:hidden; }
+    .login-header { background:var(--header-grad); padding:28px 24px 22px; text-align:center; color:white; }
+    .login-header h1 { font-size:22px; font-weight:900; }
+    .login-header p { font-size:12px; opacity:0.8; margin-top:4px; }
+    .tabs { display:flex; border-bottom:2px solid var(--n-100); }
+    .tab { flex:1; padding:14px; text-align:center; font-size:14px; font-weight:700; color:var(--n-400); cursor:pointer; border-bottom:3px solid transparent; transition:all var(--t-fast); }
+    .tab.active { color:var(--mg-700); border-bottom-color:var(--mg-500); }
+    .form-body { padding:24px; }
+    .form-group { margin-bottom:16px; }
+    .form-group label { display:block; font-size:12px; font-weight:700; color:var(--n-600); margin-bottom:6px; }
+    .lvl-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:8px; }
+    .lvl-btn { border:2px solid var(--border); background:white; border-radius:10px; padding:10px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; color:var(--n-600); text-align:center; transition:all var(--t-fast); }
+    .lvl-btn:hover { border-color:var(--n-300); }
+    .lvl-btn.sel { color:white; border-color:transparent; }
+    .lvl-btn.sel[data-lvl="advanced"] { background:var(--mg-600); }
+    .lvl-btn.sel[data-lvl="intermediate"] { background:var(--mp-500); }
+    .lvl-btn.sel[data-lvl="novice"] { background:var(--mg-400); }
+    .lvl-btn.sel[data-lvl="beginner"] { background:var(--n-400); }
+    .error { color:#dc2626; font-size:12px; font-weight:600; margin-top:8px; text-align:center; min-height:16px; }
+    .back-link { display:block; text-align:center; margin-top:16px; font-size:13px; color:var(--mg-600); text-decoration:none; font-weight:600; }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="login-header">
+      <h1>🏸 N1 Badminton</h1>
+      <p>Registration & Training System</p>
+    </div>
+    <div class="tabs">
+      <div class="tab active" id="tab-login" onclick="switchTab('login')">Login</div>
+      <div class="tab" id="tab-register" onclick="switchTab('register')">Register</div>
+    </div>
+
+    <div class="form-body" id="login-form">
+      <div class="form-group">
+        <label>Username</label>
+        <input id="li-user" type="text" autocomplete="username" placeholder="Your username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="li-pass" type="password" autocomplete="current-password" placeholder="Password">
+      </div>
+      <div class="error" id="li-err"></div>
+      <button class="btn btn-primary btn-block" onclick="doLogin()">Login</button>
+    </div>
+
+    <div class="form-body hidden" id="register-form">
+      <div class="form-group">
+        <label>Username (for login)</label>
+        <input id="rg-user" type="text" placeholder="Choose a username">
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <input id="rg-pass" type="password" placeholder="At least 4 characters">
+      </div>
+      <div class="form-group">
+        <label>Display Name (shown on board)</label>
+        <input id="rg-name" type="text" placeholder="Your name on the court board">
+      </div>
+      <div class="form-group">
+        <label>Skill Level</label>
+        <div class="lvl-grid">
+          <button class="lvl-btn" data-lvl="advanced" onclick="pickLvl('advanced')">Advanced</button>
+          <button class="lvl-btn sel" data-lvl="intermediate" onclick="pickLvl('intermediate')">Intermediate</button>
+          <button class="lvl-btn" data-lvl="novice" onclick="pickLvl('novice')">Novice</button>
+          <button class="lvl-btn" data-lvl="beginner" onclick="pickLvl('beginner')">Beginner</button>
+        </div>
+      </div>
+      <div class="error" id="rg-err"></div>
+      <button class="btn btn-primary btn-block" onclick="doRegister()">Create Account</button>
+    </div>
+    <div style="padding:0 24px 20px; text-align:center;">
+      <a class="back-link" href="/">← Event Info · 活动详情 / Home</a>
+    </div>
+  </div>
+
+  <script>
+    let selLvl = 'intermediate';
+    function pickLvl(l) {
+      selLvl = l;
+      document.querySelectorAll('.lvl-btn').forEach(b => b.classList.toggle('sel', b.dataset.lvl === l));
+    }
+
+    function switchTab(t) {
+      document.getElementById('tab-login').classList.toggle('active', t === 'login');
+      document.getElementById('tab-register').classList.toggle('active', t === 'register');
+      document.getElementById('login-form').classList.toggle('hidden', t !== 'login');
+      document.getElementById('register-form').classList.toggle('hidden', t !== 'register');
+      document.getElementById('li-err').textContent = '';
+      document.getElementById('rg-err').textContent = '';
+    }
+
+    async function doLogin() {
+      const err = document.getElementById('li-err');
+      err.textContent = '';
+      try {
+        const r = await fetch('/api/auth/login', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ username: document.getElementById('li-user').value, password: document.getElementById('li-pass').value })
+        });
+        const d = await r.json();
+        if (!r.ok) { err.textContent = d.error || 'Login failed'; return; }
+        window.location.href = d.is_admin ? '/dashboard' : '/events.html';
+      } catch(e) { err.textContent = 'Network error: ' + e.message; }
+    }
+
+    async function doRegister() {
+      const err = document.getElementById('rg-err');
+      err.textContent = '';
+      if (!document.getElementById('rg-user').value || !document.getElementById('rg-pass').value || !document.getElementById('rg-name').value) {
+        err.textContent = 'All fields required'; return;
+      }
+      try {
+        const r = await fetch('/api/auth/register', {
+          method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ username: document.getElementById('rg-user').value, password: document.getElementById('rg-pass').value, display_name: document.getElementById('rg-name').value, level: selLvl })
+        });
+        const d = await r.json();
+        if (!r.ok) { err.textContent = d.error || 'Registration failed'; return; }
+        // Account created + auto-logged-in: go straight to event browsing.
+        window.location.href = '/events.html';
+      } catch(e) { err.textContent = 'Network error: ' + e.message; }
+    }
+
+    document.querySelectorAll('input').forEach(i => {
+      i.addEventListener('keydown', e => { if (e.key === 'Enter') { if (i.id.startsWith('li')) doLogin(); else doRegister(); } });
+    });
+
+    fetch('/api/auth/me').then(r => r.json()).then(u => {
+      if (u) {
+        const hint = document.createElement('div');
+        hint.style.cssText = 'text-align:center;padding:0 24px 16px;font-size:13px;color:var(--mg-700);font-weight:600;';
+        hint.innerHTML = `Already logged in as ${u.display_name}. <a href="${u.is_admin ? '/dashboard' : '/events.html'}" style="color:var(--mg-600);">Go to ${u.is_admin ? 'dashboard' : 'events'} →</a>`;
+        document.querySelector('.login-card').appendChild(hint);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N1 Badminton — Dashboard</title>
+  <link rel="stylesheet" href="/common.css">
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    /* Header links — common.css scopes link styling to `.app-header nav a`;
+       dashboard wraps links in a div, so re-apply the same rules here. */
+    .app-header a {
+      color: rgba(255,255,255,0.9);
+      text-decoration: none;
+      font-size: 13px;
+      font-weight: 600;
+      margin-left: 14px;
+      transition: color var(--t-fast);
+    }
+    .app-header a:hover { color: white; }
+
+    /* Action button row */
+    .btn-row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+
+    /* Per-event time-slot card (structure differs from common.css .slot-item) */
+    .slot {
+      border: 1.5px solid var(--border);
+      border-radius: var(--r-input);
+      padding: 10px;
+      font-size: 12px;
+      transition: border-color var(--t);
+    }
+    .slot:hover { border-color: var(--mg-400); }
+    .slot .label { font-weight: 700; color: var(--n-700); }
+    .slot .count { font-weight: 900; color: var(--mg-700); }
+    .slot .names { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Event list (history included) ── */
+    .filters { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
+    .filter-chip {
+      border: 1.5px solid var(--n-200); background: white; color: var(--n-600);
+      border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700;
+      cursor: pointer; font-family: inherit; transition: all var(--t-fast);
+    }
+    .filter-chip:hover { border-color: var(--mg-400); }
+    .filter-chip.active { background: var(--mg-600); border-color: var(--mg-600); color: #fff; }
+
+    .event-list-card { padding: 6px 16px; }
+    .event-row {
+      display: flex; align-items: center; gap: 14px;
+      padding: 12px 0; border-bottom: 1px solid var(--n-100); cursor: pointer;
+    }
+    .event-list-card .event-row:last-child { border-bottom: none; }
+    .event-row:hover .er-title { color: var(--mg-700); }
+    .er-date {
+      width: 96px; flex-shrink: 0; text-align: center;
+      font-size: 12px; font-weight: 800; color: var(--n-600);
+      background: var(--n-50); border-radius: 8px; padding: 6px 4px;
+    }
+    .er-date span { display:block; font-size:10px; font-weight:600; color:var(--n-400); }
+    .er-main { flex: 1; min-width: 0; }
+    .er-title { font-size: 14px; font-weight: 800; color: var(--n-800); transition: color var(--t-fast); }
+    .er-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+    .er-right { display:flex; align-items:center; gap:10px; }
+    .er-arrow { font-size: 18px; font-weight: 900; color: var(--n-300); }
+    @media (max-width: 560px) { .er-date { display: none; } }
+
+    /* ── Search field (pill with leading icon) ── */
+    .search-field { position: relative; margin-top: 12px; }
+    .search-field .search-icon {
+      position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+      font-size: 13px; opacity: 0.55; pointer-events: none;
+    }
+    .search-field input[type="search"] {
+      width: 100%;
+      padding: 10px 36px 10px 36px;
+      border: 1.5px solid var(--n-200);
+      border-radius: 999px;
+      background: var(--n-50);
+      font-size: 13px;
+      color: var(--n-700);
+      appearance: none; -webkit-appearance: none;
+      transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+    }
+    .search-field input[type="search"]::-webkit-search-cancel-button { -webkit-appearance: none; }
+    .search-field input[type="search"]::placeholder { color: var(--n-400); }
+    .search-field input[type="search"]:hover { border-color: var(--mg-400); background: #fff; }
+    .search-field input[type="search"]:focus {
+      outline: none; border-color: var(--mg-500); background: #fff;
+      box-shadow: 0 0 0 3px rgba(123,166,150,0.15);
+    }
+
+    /* ── Detail view: flat layout (single event, no card frame) ── */
+    .detail-head { padding-bottom: 14px; border-bottom: 1px solid var(--border); }
+    .detail-title { font-size: 22px; font-weight: 900; color: var(--n-800); }
+    .detail-sub {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: 13px; color: var(--text-muted); margin-top: 4px;
+    }
+    .detail-fees { font-size: 12px; color: var(--text-muted); margin-top: 6px; }
+    .d-section { padding: 16px 0 6px; border-bottom: 1px solid var(--n-100); }
+    .d-section:last-child { border-bottom: none; }
+    .section-title {
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+      letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 2px;
+    }
+
+    /* Registration rows — actions stay inside the row on any width */
+    .reg-row {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      padding: 12px 0; border-bottom: 1px solid var(--n-100);
+    }
+    .reg-row:last-child { border-bottom: none; }
+    .reg-info { flex: 1 1 220px; min-width: 0; }
+    .reg-name {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      font-size: 14px; font-weight: 800; color: var(--n-800);
+    }
+    .reg-meta { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+    /* Organiser-assigned training time (players never pick their own slot) */
+    .slot-select {
+      font-family: inherit; font-size: 11px; font-weight: 700;
+      color: var(--mg-700); background: white;
+      border: 1.5px solid var(--mg-300); border-radius: 8px;
+      padding: 3px 6px; margin-left: 4px; cursor: pointer;
+    }
+    .slot-select.unset { color: #b45309; border-color: #fcd34d; background: #fffbeb; }
+    .slot-select:focus { outline: none; border-color: var(--mg-500); }
+    .reg-actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    @media (max-width: 560px) { .reg-actions { width: 100%; justify-content: flex-start; } }
+
+    /* Floating toast for socket action feedback (activate / finish) */
+    .toast {
+      position: fixed; bottom: 20px; right: 20px; z-index: 100;
+      padding: 12px 18px; border-radius: var(--r-input);
+      font-size: 14px; font-weight: 700; color: #fff;
+      box-shadow: var(--shadow-lg); opacity: 0;
+      transform: translateY(10px);
+      transition: opacity var(--t), transform var(--t);
+      pointer-events: none;
+    }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok  { background: var(--mg-grad); }
+    .toast.err { background: #dc2626; }
+
+    /* Waitlist + manual add controls */
+    .add-bar { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
+    .add-bar input { flex:1; min-width:180px; }
+    .add-bar select {
+      padding:10px 12px; border:1.5px solid var(--n-200); border-radius:var(--r-input);
+      font-family:inherit; font-size:13px; background:white;
+    }
+    .add-result, .waitlist-row {
+      display:flex; align-items:center; justify-content:space-between; gap:10px;
+      padding:9px 0; border-bottom:1px solid var(--n-100); font-size:13px;
+    }
+    .wl-pos { display:inline-block; width:26px; font-weight:900; color:var(--n-400); }
+
+    /* Payment status chips + summary row */
+    .pay-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 11px; font-weight: 800; text-transform: uppercase;
+    }
+    .pay-paid      { background: #dcfce7; color: #15803d; }
+    .pay-unpaid    { background: #fee2e2; color: #b91c1c; }
+    .pay-submitted { background: #fef3c7; color: #b45309; }
+    .pay-waived    { background: var(--n-100); color: var(--n-500); }
+    .pay-summary { display:flex; gap:10px; flex-wrap:wrap; align-items:center; font-size:12px; margin-top:10px; }
+
+    /* Payment proof modal */
+    .modal {
+      position: fixed; inset: 0; z-index: 200; padding: 20px;
+      background: rgba(15,23,42,0.55);
+      display: flex; align-items: center; justify-content: center;
+    }
+    .modal-box {
+      background: white; border-radius: 14px; padding: 16px;
+      width: 100%; max-width: 520px; max-height: 88vh; overflow: auto;
+      box-shadow: var(--shadow-lg);
+    }
+    .modal-head { display:flex; justify-content:space-between; align-items:center; font-weight:800; margin-bottom:10px; }
+    .modal-head button { border:none; background:none; font-size:18px; cursor:pointer; }
+    .modal-box img { width:100%; border-radius:10px; display:block; }
+  </style>
+</head>
+<body>
+  <div class="app-header">
+    <div>
+      <h1>🏸 N1 Admin Dashboard</h1>
+      <div class="user-info" id="user-info"></div>
+    </div>
+    <div>
+      <a href="/board">📊 Live Board</a>
+      <a href="/">ℹ️ Info</a>
+      <a href="#" id="logout">Logout</a>
+    </div>
+  </div>
+
+  <main>
+    <!-- ── List view: every event, newest first ── -->
+    <div id="list-view">
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+          <div>
+            <h2 style="margin-bottom:2px;">Events</h2>
+            <div class="text-muted" id="list-summary" style="font-size:12px;"></div>
+          </div>
+          <button class="btn btn-primary" id="toggle-create" onclick="toggleCreate()">＋ New Event</button>
+        </div>
+        <div class="filters">
+          <button class="filter-chip active" data-status="all" onclick="setFilter('all')">All</button>
+          <button class="filter-chip" data-status="open" onclick="setFilter('open')">Open</button>
+          <button class="filter-chip" data-status="active" onclick="setFilter('active')">Active</button>
+          <button class="filter-chip" data-status="finished" onclick="setFilter('finished')">Finished</button>
+        </div>
+        <div class="search-field">
+          <span class="search-icon">🔍</span>
+          <input id="event-search" type="search" placeholder="Search title or date…" oninput="onSearch(this.value)">
+        </div>
+      </div>
+
+      <div class="card hidden" id="create-card">
+        <h2>Create New Event</h2>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+          <input id="ev-title" type="text" placeholder="Event title (e.g. Wed Night)">
+          <input id="ev-date" type="date">
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Start (hour)</label>
+            <input id="ev-start" type="number" min="6" max="23" value="19">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">End (hour)</label>
+            <input id="ev-end" type="number" min="6" max="23" value="21">
+          </div>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Social fee ($)</label>
+            <input id="ev-fee-social" type="number" min="0" step="0.5" value="19">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Training + Social fee ($)</label>
+            <input id="ev-fee-training" type="number" min="0" step="0.5" value="45">
+          </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Payment link (optional — Stripe Payment Link / Apple Pay)</label>
+          <input id="ev-pay-link" type="text" placeholder="https://buy.stripe.com/…">
+        </div>
+        <button class="btn btn-primary" onclick="createNewEvent()">Create Event</button>
+      </div>
+
+      <div id="events-list"></div>
+    </div>
+
+    <!-- ── Detail view: everything for one event (flat, no card frame) ── -->
+    <div id="detail-view" class="hidden">
+      <button class="btn btn-secondary mb-12" onclick="backToList()">← All Events</button>
+
+      <div class="detail-head" id="detail-head"></div>
+      <div class="btn-row" id="detail-actions"></div>
+
+      <section class="d-section">
+        <div class="section-title">Participants</div>
+        <div class="stats" id="detail-stats"></div>
+      </section>
+
+      <section class="d-section">
+        <div class="section-title">Payments</div>
+        <div id="detail-pay"></div>
+      </section>
+
+      <section class="d-section">
+        <div class="section-title">Training slots</div>
+        <div class="slots" id="detail-slots"></div>
+      </section>
+
+      <section class="d-section hidden" id="waitlist-section">
+        <div class="section-title">Waitlist</div>
+        <div id="detail-waitlist"></div>
+      </section>
+
+      <section class="d-section">
+        <div class="section-title">Add participant</div>
+        <div class="add-bar">
+          <input id="user-search" type="search" placeholder="Search name or username (2+ chars)…" oninput="onUserSearch(this.value)">
+          <select id="add-type" onchange="toggleAddSlot(this.value)">
+            <option value="activity">Social only</option>
+            <option value="training_and_activity">Training + Social</option>
+          </select>
+          <select id="add-slot" class="hidden">
+            <option value="0">7:00 – 7:30</option>
+            <option value="1">7:30 – 8:00</option>
+            <option value="2">8:00 – 8:30</option>
+            <option value="3">8:30 – 9:00</option>
+          </select>
+        </div>
+        <div id="admin-add-results"></div>
+      </section>
+
+      <section class="d-section">
+        <div class="section-title">Registration list</div>
+        <div id="detail-regs"></div>
+      </section>
+    </div>
+
+    <div class="toast" id="toast"></div>
+    <div class="modal hidden" id="proof-modal" onclick="if(event.target===this) closeProof()">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span>🧾 Payment proof</span>
+          <button onclick="closeProof()">✕</button>
+        </div>
+        <img id="proof-img" alt="Payment proof">
+        <div class="text-muted" id="proof-note" style="font-size:12px; margin-top:10px;"></div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const SLOT_LABELS = ['7:00 – 7:30', '7:30 – 8:00', '8:00 – 8:30', '8:30 – 9:00'];
+    const FILTER_LABELS = { all: 'All', open: 'Open', active: 'Active', finished: 'Finished' };
+    const regsByEvent = {}; // eventId -> registrations (used by "copy unpaid")
+
+    let allEvents = [];
+    let currentFilter = 'all';
+    let searchTerm = '';
+    let currentEventId = null;
+
+    function money(cents) {
+      const v = (Number(cents) || 0) / 100;
+      return '$' + (Number.isInteger(v) ? v : v.toFixed(2));
+    }
+    function payBadge(status) {
+      const label = { paid: 'Paid', unpaid: 'Unpaid', submitted: 'Awaiting review', waived: 'Waived' }[status] || status;
+      return `<span class="pay-badge pay-${status}">${label}</span>`;
+    }
+
+    async function loadMe() {
+      const r = await fetch('/api/auth/me');
+      const u = await r.json();
+      if (!u || !u.is_admin) { window.location.href = '/login'; return; }
+      document.getElementById('user-info').textContent = `Logged in as ${u.display_name}`;
+    }
+
+    // ── List view ──────────────────────────────────────────
+    async function loadEvents() {
+      const r = await fetch('/api/events');
+      allEvents = await r.json();
+
+      if (currentEventId) {
+        const ev = allEvents.find(e => e.id === currentEventId);
+        if (ev) { renderDetailHeader(ev); loadRegs(currentEventId); }
+        else { backToList(); }
+      }
+      renderEventList();
+    }
+
+    function filteredEvents() {
+      const q = searchTerm.toLowerCase();
+      return allEvents.filter(ev => {
+        const matchStatus = currentFilter === 'all' || ev.status === currentFilter;
+        const matchText = !q
+          || (ev.title || '').toLowerCase().includes(q)
+          || (ev.event_date || '').includes(q);
+        return matchStatus && matchText;
+      });
+    }
+
+    function renderEventList() {
+      const list = document.getElementById('events-list');
+      const items = filteredEvents();
+      const live = allEvents.filter(e => e.status === 'active').length;
+      document.getElementById('list-summary').textContent =
+        `${allEvents.length} event(s)${live ? ` · ${live} live now` : ''}`;
+
+      if (!allEvents.length) {
+        list.innerHTML = '<div class="card"><div class="empty-state">No events yet — click “＋ New Event” to create one.</div></div>';
+        updateFilterChips();
+        return;
+      }
+      if (!items.length) {
+        list.innerHTML = '<div class="card"><div class="empty-state">No events match this filter.</div></div>';
+        updateFilterChips();
+        return;
+      }
+
+      list.innerHTML = `<div class="card event-list-card">${items.map(ev => `
+        <div class="event-row" onclick="openEvent(${ev.id})">
+          <div class="er-date">${ev.event_date}<span>${ev.start_time}-${ev.end_time}</span></div>
+          <div class="er-main">
+            <div class="er-title">${ev.title}</div>
+            <div class="er-meta">${ev.reg_count || 0}/${ev.capacity || 33} registered${ev.waitlist_count ? ` · ${ev.waitlist_count} waitlisted` : ''}${ev.status === 'active' ? ' · live now' : ''}</div>
+          </div>
+          <div class="er-right">
+            <span class="badge badge-${ev.status}">${ev.status}</span>
+            <span class="er-arrow">›</span>
+          </div>
+        </div>`).join('')}</div>`;
+      updateFilterChips();
+    }
+
+    function updateFilterChips() {
+      document.querySelectorAll('.filter-chip').forEach(chip => {
+        const s = chip.dataset.status;
+        const n = s === 'all' ? allEvents.length : allEvents.filter(e => e.status === s).length;
+        chip.textContent = `${FILTER_LABELS[s]} (${n})`;
+        chip.classList.toggle('active', s === currentFilter);
+      });
+    }
+
+    function setFilter(status) {
+      currentFilter = status;
+      renderEventList();
+    }
+
+    function onSearch(value) {
+      searchTerm = value.trim();
+      renderEventList();
+    }
+
+    function toggleCreate() {
+      const card = document.getElementById('create-card');
+      const hidden = card.classList.toggle('hidden');
+      document.getElementById('toggle-create').textContent = hidden ? '＋ New Event' : '✕ Cancel';
+    }
+
+    // ── Detail view ────────────────────────────────────────
+    function openEvent(id) {
+      const ev = allEvents.find(e => e.id === id);
+      if (!ev) return;
+      currentEventId = id;
+      document.getElementById('list-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.remove('hidden');
+      // Fresh manual-add search for each event.
+      addQuery = '';
+      const searchEl = document.getElementById('user-search');
+      if (searchEl) searchEl.value = '';
+      document.getElementById('admin-add-results').innerHTML = '';
+      renderDetailHeader(ev);
+      loadRegs(id);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function backToList() {
+      currentEventId = null;
+      document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('list-view').classList.remove('hidden');
+      document.getElementById('toggle-create').textContent = '＋ New Event';
+      document.getElementById('create-card').classList.add('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function renderDetailHeader(ev) {
+      const cap = ev.capacity || 33;
+      const taken = ev.reg_count || 0;
+      document.getElementById('detail-head').innerHTML = `
+        <div class="detail-title">${ev.title}</div>
+        <div class="detail-sub">
+          <span>${ev.event_date} · ${ev.start_time}–${ev.end_time}</span>
+          <span class="badge badge-${ev.status}">${ev.status}</span>
+        </div>
+        <div class="detail-fees" id="cap-line">
+          Capacity: <strong>${taken}/${cap}</strong>${taken >= cap ? ' · <span style="color:#b91c1c;font-weight:800;">FULL</span>' : ''}
+          ${ev.waitlist_count ? ` · ${ev.waitlist_count} on waitlist` : ''}
+        </div>
+        <div class="detail-fees">
+          Fees: ${money(ev.fee_social_cents)} social · ${money(ev.fee_training_cents)} training+social
+          ${ev.payment_link ? ' · <span style="color:var(--mg-700); font-weight:700;">online payment link set</span>' : ''}
+        </div>`;
+      renderActions(ev);
+    }
+
+    // Lifecycle buttons: draft → open → closed → active → finished.
+    function renderActions(ev) {
+      const id = ev.id;
+      const actions = document.getElementById('detail-actions');
+      let html = '';
+      switch (ev.status) {
+        case 'draft':
+          html += `<button class="btn btn-primary" onclick="patchEvent(${id}, {status:'open'})">Open Registration</button>`;
+          break;
+        case 'open':
+          html += `<button class="btn btn-secondary" onclick="patchEvent(${id}, {status:'closed'})">Close Registration</button>`;
+          html += `<button class="btn btn-secondary" onclick="activateFromDashboard(${id})">⚡ Set Active</button>`;
+          html += `<a class="btn btn-primary" href="/board?eventId=${id}&activate=1">📊 Activate &amp; Open Board</a>`;
+          break;
+        case 'closed':
+          html += `<button class="btn btn-secondary" onclick="patchEvent(${id}, {status:'open'})">Reopen Registration</button>`;
+          html += `<button class="btn btn-secondary" onclick="activateFromDashboard(${id})">⚡ Set Active</button>`;
+          html += `<a class="btn btn-primary" href="/board?eventId=${id}&activate=1">📊 Activate &amp; Open Board</a>`;
+          break;
+        case 'active':
+          html += `<button class="btn btn-danger" onclick="finishEvent(${id})">✅ Finish Event</button>`;
+          html += `<a class="btn btn-primary" href="/board?eventId=${id}">📊 Open Live Board</a>`;
+          break;
+        case 'finished':
+          html += `<button class="btn btn-secondary" onclick="activateFromDashboard(${id})">🔄 Reactivate</button>`;
+          html += `<a class="btn btn-primary" href="/board?eventId=${id}&activate=1">📊 Activate &amp; Open Board</a>`;
+          break;
+      }
+      html += `<button class="btn btn-danger" onclick="deleteEvent(${id})">Delete Event</button>`;
+      actions.innerHTML = html;
+    }
+
+    async function loadRegs(eventId) {
+      const r = await fetch(`/api/events/${eventId}/registrations`);
+      if (!r.ok) { backToList(); loadEvents(); return; }
+      const d = await r.json();
+      const regs = d.registrations || [];
+      const waitlist = d.waitlist || [];
+      const cap = d.capacity || 33;
+      regsByEvent[eventId] = regs;
+      const capLine = document.getElementById('cap-line');
+      if (capLine) {
+        capLine.innerHTML = `Capacity: <strong>${regs.length}/${cap}</strong>${regs.length >= cap ? ' · <span style="color:#b91c1c;font-weight:800;">FULL</span>' : ''}${waitlist.length ? ` · ${waitlist.length} on waitlist` : ''}`;
+      }
+      const ps = d.paymentSummary || { total: regs.length, paid: 0, submitted: 0, unpaid: 0, waived: 0,
+        expectedCents: 0, collectedCents: 0, waivedCents: 0, outstandingCents: 0 };
+
+      const activityCount = regs.filter(r => r.reg_type === 'activity').length;
+      const trainingCount = regs.filter(r => r.reg_type === 'training_and_activity').length;
+      document.getElementById('detail-stats').innerHTML = `
+        <div class="stat"><div class="num">${regs.length}<span style="font-size:12px;color:var(--n-400);"> / ${cap}</span></div><div class="lbl">Registered</div></div>
+        <div class="stat"><div class="num">${activityCount}</div><div class="lbl">Social Only</div></div>
+        <div class="stat"><div class="num">${trainingCount}</div><div class="lbl">Training+Social</div></div>
+        <div class="stat"><div class="num">${waitlist.length}</div><div class="lbl">Waitlist</div></div>
+        <div class="stat"><div class="num">${ps.paid}</div><div class="lbl">Paid</div></div>
+        <div class="stat"><div class="num">${ps.unpaid + ps.submitted}</div><div class="lbl">Outstanding</div></div>
+      `;
+
+      // Payment reconciliation summary (only visible inside the event detail)
+      const pending = ps.unpaid + ps.submitted;
+      document.getElementById('detail-pay').innerHTML = `
+        <div class="pay-summary">
+          <span>💰 Collected <strong>${money(ps.collectedCents)}</strong> of ${money(ps.expectedCents)} expected</span>
+          <span class="pay-badge pay-paid">${ps.paid} paid</span>
+          <span class="pay-badge pay-submitted">${ps.submitted} awaiting review</span>
+          <span class="pay-badge pay-unpaid">${ps.unpaid} unpaid</span>
+          ${ps.waived ? `<span class="pay-badge pay-waived">${ps.waived} waived (${money(ps.waivedCents)})</span>` : ''}
+          ${pending ? `<span style="color:#b91c1c;font-weight:700;">Outstanding ${money(ps.outstandingCents)}</span>
+            <button class="btn btn-secondary btn-sm" onclick="copyUnpaid(${eventId})">📋 Copy unpaid names</button>` : ''}
+        </div>`;
+
+      document.getElementById('detail-slots').innerHTML = [0,1,2,3].map(i => {
+        const slotRegs = regs.filter(r => r.training_slot === i);
+        const names = slotRegs.map(r => r.display_name).join(', ') || '—';
+        return `<div class="slot">
+          <div class="label">${SLOT_LABELS[i]}</div>
+          <div class="count">${slotRegs.length}/4</div>
+          <div class="names">${names}</div>
+        </div>`;
+      }).join('');
+
+      // Waitlist — only rendered when someone is queued for a full event.
+      const wlSection = document.getElementById('waitlist-section');
+      if (waitlist.length) {
+        wlSection.classList.remove('hidden');
+        document.getElementById('detail-waitlist').innerHTML = waitlist.map((w, i) => `
+          <div class="waitlist-row">
+            <div>
+              <span class="wl-pos">#${i + 1}</span><strong>${w.display_name}</strong>
+              <span class="text-muted" style="font-size:11px;"> · ${w.level} · ${w.reg_type === 'activity' ? 'Social' : 'Training + Social'}</span>
+            </div>
+            <div class="reg-actions">
+              <button class="btn btn-primary btn-sm" onclick="promoteWaitlist(${w.id})">↑ Promote</button>
+              <button class="btn btn-secondary btn-sm" onclick="removeWaitlist(${w.id})">Remove</button>
+            </div>
+          </div>`).join('');
+      } else {
+        wlSection.classList.add('hidden');
+        document.getElementById('detail-waitlist').innerHTML = '';
+      }
+
+      if (!regs.length) {
+        document.getElementById('detail-regs').innerHTML =
+          '<div class="empty-state" style="margin-top:12px;">No registrations yet.</div>';
+        return;
+      }
+      document.getElementById('detail-regs').innerHTML = `
+        <div class="reg-list">
+          ${regs.map(r => `
+            <div class="reg-row">
+              <div class="reg-info">
+                <div class="reg-name">${r.display_name} ${payBadge(r.payment_status || 'unpaid')}</div>
+                <div class="reg-meta">
+                  ${r.level} · ${r.reg_type === 'activity' ? 'Social' : 'Training + Social'}
+                  ${r.reg_type === 'training_and_activity'
+                    ? `<select class="slot-select ${r.training_slot == null ? 'unset' : ''}"
+                        title="Assign training time"
+                        onchange="assignSlot(${r.id}, ${eventId}, this.value)">
+                        <option value="" ${r.training_slot == null ? 'selected' : ''}>Assign time…</option>
+                        ${SLOT_LABELS.map((l, i) => `<option value="${i}" ${r.training_slot === i ? 'selected' : ''}>${l}</option>`).join('')}
+                      </select>`
+                    : ''}
+                  ${r.partner_name ? ' · Partner: ' + r.partner_name : ''} · ${money(r.fee_cents)}
+                </div>
+              </div>
+              <div class="reg-actions">
+                ${r.payment_proof ? `<button class="btn btn-secondary btn-sm" onclick="viewProof(${r.id})">🧾 Proof</button>` : ''}
+                ${r.payment_status !== 'paid'
+                  ? `<button class="btn btn-primary btn-sm" onclick="setPayment(${r.id}, ${eventId}, 'paid')">✓ Paid</button>`
+                  : `<button class="btn btn-secondary btn-sm" onclick="setPayment(${r.id}, ${eventId}, 'unpaid')">Undo</button>`}
+                ${r.payment_status !== 'waived'
+                  ? `<button class="btn btn-secondary btn-sm" onclick="setPayment(${r.id}, ${eventId}, 'waived')">Waive</button>` : ''}
+                <button class="btn btn-danger btn-sm" onclick="removeReg(${r.id}, ${eventId})">Remove</button>
+              </div>
+            </div>`).join('')}
+        </div>`;
+    }
+
+    // ── Admin: add / remove participants + waitlist ───────
+    let addTimer = null;
+    let addQuery = '';
+
+    function onUserSearch(value) {
+      addQuery = value.trim();
+      clearTimeout(addTimer);
+      if (addQuery.length < 2) { renderAddResults([]); return; }
+      const q = addQuery;
+      addTimer = setTimeout(async () => {
+        try {
+          const r = await fetch(`/api/events/${currentEventId}/user-search?q=${encodeURIComponent(q)}`);
+          const rows = r.ok ? await r.json() : [];
+          if (addQuery !== q) return; // a newer keystroke superseded this result
+          renderAddResults(rows);
+        } catch (e) { toast('❌ Network error: ' + e.message, false); }
+      }, 300);
+    }
+
+    function renderAddResults(rows) {
+      const el = document.getElementById('admin-add-results');
+      if (!el) return;
+      if (!addQuery || addQuery.length < 2) { el.innerHTML = ''; return; }
+      if (!rows.length) {
+        el.innerHTML = '<div class="text-muted" style="font-size:12px;margin-top:8px;">No matching users (people already in the event are hidden).</div>';
+        return;
+      }
+      el.innerHTML = rows.map(u => `
+        <div class="add-result">
+          <div><strong>${u.display_name}</strong> <span class="text-muted" style="font-size:11px;">${u.username} · ${u.level}</span></div>
+          <button class="btn btn-primary btn-sm" onclick="addParticipant(${u.id})">＋ Add</button>
+        </div>`).join('');
+    }
+
+    function toggleAddSlot(value) {
+      document.getElementById('add-slot').classList.toggle('hidden', value !== 'training_and_activity');
+    }
+
+    async function addParticipant(userId) {
+      const type = document.getElementById('add-type').value;
+      const body = { user_id: userId, reg_type: type };
+      if (type === 'training_and_activity') body.training_slot = Number(document.getElementById('add-slot').value);
+      try {
+        const r = await fetch(`/api/events/${currentEventId}/participants`, {
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+          body: JSON.stringify(body)
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
+        toast('✅ Participant added (admin — no capacity limit)');
+        document.getElementById('user-search').value = '';
+        addQuery = '';
+        renderAddResults([]);
+        loadEvents();
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    async function promoteWaitlist(wlId) {
+      try {
+        const r = await fetch(`/api/registrations/waitlist/${wlId}/promote`, { method:'POST', credentials:'same-origin' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
+        toast('✅ Promoted from waitlist');
+        loadEvents();
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    async function removeWaitlist(wlId) {
+      if (!confirm('Remove this person from the waitlist?')) return;
+      try {
+        const r = await fetch(`/api/registrations/waitlist/${wlId}`, { method:'DELETE', credentials:'same-origin' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
+        toast('✅ Removed from waitlist');
+        loadEvents();
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    // Admin assigns a training time; players can no longer choose one.
+    async function assignSlot(regId, eventId, value) {
+      try {
+        const r = await fetch(`/api/registrations/${regId}/training-slot`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ training_slot: value === '' ? null : Number(value) }),
+        });
+        if (r.status === 401 || r.status === 403) {
+          toast('❌ Session expired — please log in again', false);
+          setTimeout(() => { window.location.href = '/login'; }, 1500);
+          return;
+        }
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); loadRegs(eventId); return; }
+        toast(d.training_slot == null ? '✅ Training time cleared' : `✅ Training time set to ${SLOT_LABELS[d.training_slot]}`);
+        loadRegs(eventId);
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    async function removeReg(regId, eventId) {
+      if (!confirm('Remove this participant from the event?\n\nThe registration will be cancelled.')) return;
+      try {
+        const r = await fetch(`/api/registrations/${regId}`, { method:'DELETE', credentials:'same-origin' });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
+        toast('✅ Participant removed');
+        loadEvents();
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    // ── Event CRUD ─────────────────────────────────────────
+    async function createNewEvent() {
+      const title = document.getElementById('ev-title').value;
+      const date = document.getElementById('ev-date').value;
+      const startH = parseInt(document.getElementById('ev-start').value, 10);
+      const endH = parseInt(document.getElementById('ev-end').value, 10);
+      if (!title) { alert('Please enter an event title'); return; }
+      if (!date) { alert('Please pick a date'); return; }
+      if (isNaN(startH) || isNaN(endH)) { alert('Please set start and end hour'); return; }
+      if (startH < 6 || startH > 23 || endH < 6 || endH > 23) { alert('Hours must be between 6 and 23'); return; }
+      if (endH <= startH) { alert('End hour must be after start hour'); return; }
+      const startTime = String(startH).padStart(2, '0') + ':00';
+      const endTime = String(endH).padStart(2, '0') + ':00';
+      const feeSocial = Math.round(parseFloat(document.getElementById('ev-fee-social').value) * 100);
+      const feeTraining = Math.round(parseFloat(document.getElementById('ev-fee-training').value) * 100);
+      if (!Number.isFinite(feeSocial) || !Number.isFinite(feeTraining) || feeSocial < 0 || feeTraining < 0) {
+        alert('Please enter valid fees'); return;
+      }
+      const paymentLink = document.getElementById('ev-pay-link').value.trim();
+      try {
+        const r = await fetch('/api/events', {
+          method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+          body: JSON.stringify({ title, event_date: date, start_time: startTime, end_time: endTime,
+                                 fee_social_cents: feeSocial, fee_training_cents: feeTraining,
+                                 payment_link: paymentLink || null })
+        });
+        if (!r.ok) { const d = await r.json(); alert('Failed: ' + (d.error || r.status)); return; }
+        toast('✅ Event created');
+      } catch(e) { alert('Network error: ' + e.message); return; }
+      document.getElementById('ev-title').value = '';
+      document.getElementById('ev-date').value = '';
+      document.getElementById('ev-pay-link').value = '';
+      document.getElementById('toggle-create').textContent = '＋ New Event';
+      document.getElementById('create-card').classList.add('hidden');
+      loadEvents();
+    }
+
+    async function patchEvent(id, patch) {
+      await fetch(`/api/events/${id}`, {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+        body: JSON.stringify(patch)
+      });
+      loadEvents();
+    }
+
+    async function deleteEvent(id) {
+      if (!confirm('Delete this event and all its registrations? This cannot be undone.')) return;
+      await fetch(`/api/events/${id}`, { method: 'DELETE', credentials:'same-origin' });
+      if (currentEventId === id) backToList();
+      loadEvents();
+    }
+
+    // ── Payment review ─────────────────────────────────────
+    async function setPayment(regId, eventId, status) {
+      if (status === 'paid' && !confirm('Mark this participant as PAID?')) return;
+      try {
+        const r = await fetch(`/api/registrations/${regId}/payment`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ status }),
+        });
+        if (r.status === 401 || r.status === 403) {
+          toast('❌ Session expired — please log in again', false);
+          setTimeout(() => { window.location.href = '/login'; }, 1500);
+          return;
+        }
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
+        toast(`✅ Payment marked ${status}`);
+        loadRegs(eventId);
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    async function viewProof(regId) {
+      try {
+        const r = await fetch(`/api/registrations/${regId}/proof`);
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || 'No proof available'), false); return; }
+        document.getElementById('proof-img').src = d.proof;
+        const when = d.submittedAt ? new Date(d.submittedAt).toLocaleString() : '';
+        document.getElementById('proof-note').textContent =
+          (d.note ? `Reference: ${d.note}` : '') + (when ? ` · Submitted ${when}` : '');
+        document.getElementById('proof-modal').classList.remove('hidden');
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    function closeProof() {
+      document.getElementById('proof-modal').classList.add('hidden');
+      document.getElementById('proof-img').src = '';
+    }
+
+    function copyUnpaid(eventId) {
+      const rows = (regsByEvent[eventId] || [])
+        .filter(r => ['unpaid', 'submitted'].includes(r.payment_status));
+      if (!rows.length) { toast('Everyone has paid 🎉'); return; }
+      const text = rows.map(r =>
+        `${r.display_name} — ${money(r.fee_cents)} (${r.payment_status === 'submitted' ? 'proof awaiting review' : 'unpaid'})`
+      ).join('\n');
+      navigator.clipboard?.writeText(text)
+        .then(() => toast(`📋 Copied ${rows.length} unpaid name(s)`))
+        .catch(() => toast('❌ Copy failed — select the names manually', false));
+    }
+
+    // ── Socket connection for Activate / Finish ────────────
+    const socket = (typeof io !== 'undefined') ? io() : null;
+
+    let toastTimer = null;
+    function toast(msg, ok = true) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show ' + (ok ? 'ok' : 'err');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { el.className = 'toast'; }, 3000);
+    }
+
+    if (socket) {
+      socket.on('activate_success', ({ title }) => {
+        toast(`✅ "${title}" is now active. Board loaded with registrants.`);
+        loadEvents();
+      });
+      socket.on('activate_error', ({ reason }) => {
+        const map = { not_found: 'Event not found', not_admin: 'Admin only' };
+        toast('❌ Activate failed: ' + (map[reason] || reason), false);
+      });
+      socket.on('finish_success', ({ title }) => {
+        toast(`✅ "${title}" finished. Board cleared.`);
+        loadEvents();
+      });
+      socket.on('finish_error', ({ reason, current }) => {
+        const map = { not_found: 'Event not found', not_active: `Event is ${current}, not active` };
+        toast('❌ Finish failed: ' + (map[reason] || reason), false);
+      });
+    }
+
+    function activateFromDashboard(id) {
+      if (!socket) { toast('❌ Socket not connected', false); return; }
+      if (!confirm('Activate this event now?\n\nAll registrants will be loaded into the live board queue, and any previously active event will be marked finished.')) return;
+      socket.emit('activate_event', { eventId: id });
+    }
+
+    function finishEvent(id) {
+      if (!socket) { toast('❌ Socket not connected', false); return; }
+      if (!confirm('Finish this event?\n\nIt will be marked as finished and the live board will be cleared.')) return;
+      socket.emit('finish_event', { eventId: id });
+    }
+
+    document.getElementById('logout').onclick = async (e) => {
+      e.preventDefault();
+      await fetch('/api/auth/logout', { method:'POST' });
+      window.location.href = '/login';
+    };
+
+    loadMe().then(loadEvents);
+  </script>
+</body>
+</html>
