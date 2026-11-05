@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>N1 Badminton — Event Info | 活动详情</title>
+  <title>N1 Badminton — Event Info</title>
   <link rel="stylesheet" href="/common.css">
   <style>
     /* index.html — bilingual (EN / 中文) landing + event info page.
@@ -76,6 +76,10 @@
     h3.sub-title { font-size: 14.5px; font-weight: 800; color: var(--mp-700); margin: 14px 0 6px; }
     p { font-size: 14px; line-height: 1.65; color: var(--n-700); }
     p.zh { font-size: 13px; color: var(--n-500); margin-top: 4px; }
+    /* Keep the Info page bilingual while the rest of the site stays English-only. */
+    html[lang="en"] main .zh { display: block !important; }
+    html[lang="en"] main li.zh { display: list-item !important; }
+    html[lang="en"] main .n1-zh { display: inline !important; }
     p + h3.sub-title, ul + h3.sub-title { margin-top: 18px; }
 
     ul.info-list { list-style: none; margin: 8px 0; }
@@ -208,6 +212,7 @@
       .page-head-shuttle { width: 58px; height: 58px; top: 12px; right: 10px; opacity: 0.5; }
     }
   </style>
+  <script src="/i18n.js?v=3"></script>
 </head>
 <body>
   <header class="app-header">
@@ -250,7 +255,7 @@
 
     <!-- What's New -->
     <section class="card" id="new">
-      <div class="sec-title"><span class="bar"></span>What's New? <span style="font-weight:600;color:var(--n-400)">| 最新动态</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">What's New?</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">最新动态</span></div>
       <div class="callout new">
         <span class="t">NEW! PLAY &amp; TRAIN | 全新活动 PLAY &amp; TRAIN</span>
         See the <a href="#playtrain">Play &amp; Train section</a> below for more details!
@@ -260,7 +265,7 @@
 
     <!-- About -->
     <section class="card" id="about">
-      <div class="sec-title"><span class="bar"></span>About N1 Badminton <span style="font-weight:600;color:var(--n-400)">| 关于 N1 羽球</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">About N1 Badminton</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">关于 N1 羽球</span></div>
       <h3 class="sub-title">PLAY STARTS HERE | 开启羽球之路</h3>
       <p>N1 Badminton welcomes players of all skill levels with structured socials so players can enjoy quality games matched to their ability! Whether you are new to badminton or looking to improve your game, we have something for you.</p>
       <p class="zh">N1 羽毛球欢迎所有水平的球友参与，每位球员都能享受适合自己水平的精彩对打。不论你是新手还是想提升球技的老手，我们都欢迎你加入！</p>
@@ -273,7 +278,7 @@
 
     <!-- Waiting List -->
     <section class="card" id="waitlist">
-      <div class="sec-title"><span class="bar"></span>Waiting List <span style="font-weight:600;color:var(--n-400)">| 等候名单</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Waiting List</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">等候名单</span></div>
       <ul class="info-list">
         <li>You can still sign up even if the event is full! Once signed up, you will be added to our online wait list.</li>
         <li class="zh">即使活动已满，你仍然可以报名！报名后，你将被加入我们的线上等候名单。</li>
@@ -298,7 +303,7 @@
         <div class="pt-hero-badge">📣 Event Notice · 活动通知</div>
         <div class="pt-hero-title">PLAY<span class="arrow">⇄</span>TRAIN</div>
         <div class="pt-hero-sub">Training + Social · 训练与玩耍</div>
-        <div class="pt-hero-tag">30-minute personalised training with @ag_badminton</div>
+        <div class="pt-hero-tag">30-minute personalised training with @ag_badminton · 30 分钟个性化训练</div>
       </div>
 
       <div class="pt-body">
@@ -309,9 +314,9 @@
       <p>Take the opportunity to play in our social and receive a 30-minute personalised training session with @ag_badminton.</p>
       <p class="zh">训练与玩耍！🏸 在我们的社交活动获得由 @ag_badminton 提供的 30 分钟个性化训练课程。</p>
       <div class="pt-chips">
-        <span>30 min personalised training</span>
-        <span>Incl. 2hr social</span>
-        <span>From 7pm · first come, first serve</span>
+        <span>30 min personalised training · 30 分钟个性化训练</span>
+        <span>Incl. 2hr social · 含 2 小时社交活动</span>
+        <span>From 7pm · first come, first serve · 晚上 7 点开始 · 先到先得</span>
       </div>
 
       <h3 class="sub-title">💡 How it works | 活动说明</h3>
@@ -349,7 +354,7 @@
 
     <!-- FAQs -->
     <section class="card" id="faq">
-      <div class="sec-title"><span class="bar"></span>FAQs <span style="font-weight:600;color:var(--n-400)">| 常见问题</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">FAQs</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">常见问题</span></div>
 
       <h3 class="sub-title">FEE | 费用</h3>
       <ul class="info-list">
@@ -379,7 +384,7 @@
 
     <!-- Travel -->
     <section class="card" id="travel">
-      <div class="sec-title"><span class="bar"></span>Travel Instructions <span style="font-weight:600;color:var(--n-400)">| 交通指南</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Travel Instructions</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">交通指南</span></div>
 
       <h3 class="sub-title">ARRIVING BY CAR | 驾车到达</h3>
       <p>Parking is available on the street side where permitted, as well as within Vision Badminton Centre's parking grounds.</p>
@@ -407,7 +412,7 @@
 
     <!-- Entry -->
     <section class="card" id="entry">
-      <div class="sec-title"><span class="bar"></span>Entry Guide <span style="font-weight:600;color:var(--n-400)">| 入场指南</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Entry Guide</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">入场指南</span></div>
       <p>There are two ways to enter the hall:</p>
       <p class="zh">进入大楼有两种方式：</p>
       <ul class="info-list">
@@ -420,14 +425,14 @@
 
     <!-- Toilets -->
     <section class="card" id="toilets">
-      <div class="sec-title"><span class="bar"></span>Toilets <span style="font-weight:600;color:var(--n-400)">| 洗手间位置</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Toilets</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">洗手间位置</span></div>
       <p>A unisex PWD/toilet and separate men's bathrooms are available. Women's toilet may or may not be accessible due to ongoing construction in the front area — please use the unisex toilet during this time if there is no current access.</p>
       <p class="zh">提供无性别无障碍厕所（PWD）及独立男士厕所。受前方施工影响，女士厕所可能无法使用，如遇此情况，请在此期间使用无性别厕所。</p>
     </section>
 
     <!-- Cancellation -->
     <section class="card" id="cancellation">
-      <div class="sec-title"><span class="bar"></span>Cancellation Policy <span style="font-weight:600;color:var(--n-400)">| 取消政策</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Cancellation Policy</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">取消政策</span></div>
       <ul class="info-list">
         <li>Cancellations made 24hrs before the session will receive a full refund or credit for a future session.</li>
         <li class="zh">若在活动开始前 24 小时取消，可获得全额退款或抵扣未来活动。</li>
@@ -440,14 +445,14 @@
 
     <!-- Disclaimers -->
     <section class="card" id="disclaimer">
-      <div class="sec-title"><span class="bar"></span>Disclaimers <span style="font-weight:600;color:var(--n-400)">| 免责声明</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Disclaimers</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">免责声明</span></div>
       <p>By joining this session, players acknowledge they are participating at their own risk. The organisers are not liable for any injury, loss or damage sustained during the event. Please play responsibly and be respectful to all participants.</p>
       <p class="zh">参加本次活动即表示球员自行承担风险。组织方对活动期间发生的任何伤害、损失或财产损害不承担责任。请合理参加，并尊重所有参与者。</p>
     </section>
 
     <!-- Contact -->
     <section class="card" id="contact">
-      <div class="sec-title"><span class="bar"></span>Contact Us <span style="font-weight:600;color:var(--n-400)">| 联系我们</span></div>
+      <div class="sec-title"><span class="bar"></span><span class="n1-en">Contact Us</span> <span class="n1-zh" style="font-weight:600;color:var(--n-400)">联系我们</span></div>
       <p>Please contact us via our social media or email us at <a class="ig-link" href="mailto:teamn1badm@gmail.com">teamn1badm@gmail.com</a>. We'll endeavour to get back to you ASAP.</p>
       <p class="zh">请通过我们的社交媒体与我们联系，或发送邮件至 <a href="mailto:teamn1badm@gmail.com">teamn1badm@gmail.com</a>。我们会尽快回复您。</p>
       <div class="cta-row">

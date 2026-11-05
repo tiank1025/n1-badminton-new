@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>N1 Badminton — My Profile</title>
+  <link rel="stylesheet" href="/common.css">
+  <script src="/i18n.js?v=3"></script>
+  <style>
+    main { max-width: 560px; margin: 28px auto; padding: 0 16px; }
+    .profile-form { padding: 22px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display:block; font-size:13px; font-weight:700; margin-bottom:6px; }
+    .profile-help { color:var(--n-500); font-size:12px; margin-top:5px; }
+    .error { color:#b91c1c; min-height:18px; font-size:13px; margin-top:10px; }
+    .success { color:var(--mg-700); min-height:18px; font-size:13px; margin-top:10px; }
+    .profile-nav { display:flex; gap:14px; flex-wrap:wrap; padding:16px; }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div><h1>🏸 My Profile</h1><div class="user-info" id="profile-user"></div></div>
+    <nav><a href="/events">Events</a><a href="/matches">Matches</a><a href="/">Info</a><a href="#" id="logout">Logout</a></nav>
+  </header>
+  <main>
+    <section class="card profile-form">
+      <h2>Personal information</h2>
+      <p class="profile-help" style="margin:6px 0 20px">Your email is used for waitlist promotion notifications.</p>
+      <form id="profile-form">
+        <div class="form-group"><label for="username">Username</label><input id="username" disabled></div>
+        <div class="form-group"><label for="display-name">Display name</label><input id="display-name" maxlength="60" required></div>
+        <div class="form-group"><label for="email">Email address</label><input id="email" type="email" autocomplete="email" required><div class="profile-help">Used to notify you when a waitlist spot opens.</div></div>
+        <div class="form-group"><label for="level">Skill level</label><select id="level" required><option value="advanced">Advanced</option><option value="intermediate">Intermediate</option><option value="novice">Novice</option><option value="beginner">Beginner</option></select></div>
+        <div class="error" id="error"></div><div class="success" id="success"></div>
+        <button class="btn btn-primary btn-block" type="submit">Save changes</button>
+      </form>
+    </section>
+  </main>
+  <script>
+    const $ = id => document.getElementById(id);
+    async function loadProfile() {
+      const r = await fetch('/api/auth/me');
+      const user = await r.json();
+      if (!user) { location.href = '/login'; return; }
+      $('profile-user').textContent = user.display_name;
+      $('username').value = user.username || '';
+      $('display-name').value = user.display_name || '';
+      $('email').value = user.email || '';
+      $('level').value = user.level || 'intermediate';
+    }
+    $('profile-form').addEventListener('submit', async e => {
+      e.preventDefault(); $('error').textContent = ''; $('success').textContent = '';
+      const button = e.currentTarget.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        const r = await fetch('/api/auth/profile', { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ display_name:$('display-name').value, email:$('email').value, level:$('level').value }) });
+        const data = await r.json();
+        if (!r.ok) { $('error').textContent = data.error || 'Could not save profile'; return; }
+        $('profile-user').textContent = data.user.display_name;
+        $('success').textContent = 'Profile updated.';
+      } catch { $('error').textContent = 'Network error. Please try again.'; }
+      finally { button.disabled = false; }
+    });
+    $('logout').addEventListener('click', async e => { e.preventDefault(); await fetch('/api/auth/logout', {method:'POST'}); location.href='/login'; });
+    loadProfile();
+  </script>
+</body>
+</html>

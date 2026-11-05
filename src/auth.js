@@ -22,10 +22,12 @@ async function requireAdmin(req, res, next) {
 
 // POST /api/auth/register
 router.post('/register', async (req, res) => {
-  const { username, password, display_name, level } = req.body || {};
-  if (!username || !password || !display_name) {
-    return res.status(400).json({ error: 'username, password, display_name are required' });
+  const { username, password, display_name, email, level } = req.body || {};
+  const normalizedEmail = String(email || '').trim().toLowerCase();
+  if (!username || !password || !display_name || !normalizedEmail) {
+    return res.status(400).json({ error: 'username, password, display_name and email are required' });
   }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) return res.status(400).json({ error: 'Invalid email address' });
   if (password.length < 4) return res.status(400).json({ error: 'Password too short (min 4 chars)' });
   if (!LEVELS.includes(level || 'novice')) return res.status(400).json({ error: 'Invalid level' });
 
@@ -35,12 +37,12 @@ router.post('/register', async (req, res) => {
   const { hash, salt } = hashPassword(password);
   const now = Date.now();
   const result = await db.prepare(
-    `INSERT INTO users (username, password_hash, password_salt, display_name, level, is_admin, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, 0, ?, ?)`
-  ).run(username, hash, salt, display_name, level || 'novice', now, now);
+    `INSERT INTO users (username, password_hash, password_salt, display_name, email, level, is_admin, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
+  ).run(username, hash, salt, display_name, normalizedEmail, level || 'novice', now, now);
 
   req.session.userId = result.lastInsertRowid;
-  res.json({ id: result.lastInsertRowid, username, display_name, level: level || 'novice', is_admin: 0 });
+  res.json({ id: result.lastInsertRowid, username, display_name, email: normalizedEmail, level: level || 'novice', is_admin: 0 });
 });
 
 // POST /api/auth/login
@@ -67,9 +69,37 @@ router.post('/logout', (req, res) => {
 router.get('/me', async (req, res) => {
   if (!req.session?.userId) return res.json(null);
   const user = await db.prepare(
-    'SELECT id, username, display_name, level, is_admin FROM users WHERE id = ?'
+    'SELECT id, username, display_name, email, level, is_admin FROM users WHERE id = ?'
   ).get(req.session.userId);
   res.json(user || null);
+});
+
+// PATCH /api/auth/email — players opt in to email notifications themselves
+// (used when a waitlist spot opens). Empty string clears the address.
+router.patch('/email', requireLogin, async (req, res) => {
+  const raw = String(req.body?.email || '').trim();
+  if (raw && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+    return res.status(400).json({ error: 'Invalid email address' });
+  }
+  await db.prepare('UPDATE users SET email = ? WHERE id = ?')
+    .run(raw || null, req.session.userId);
+  res.json({ ok: true, email: raw || null });
+});
+
+// PATCH /api/auth/profile — update the signed-in user's public profile.
+router.patch('/profile', requireLogin, async (req, res) => {
+  const displayName = String(req.body?.display_name || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const level = String(req.body?.level || '');
+  if (!displayName) return res.status(400).json({ error: 'Display name is required' });
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({ error: 'Valid email is required' });
+  if (!LEVELS.includes(level)) return res.status(400).json({ error: 'Invalid level' });
+  const duplicate = await db.prepare('SELECT id FROM users WHERE display_name = ? AND id <> ?').get(displayName, req.session.userId);
+  if (duplicate) return res.status(409).json({ error: 'Display name already taken' });
+  await db.prepare('UPDATE users SET display_name = ?, email = ?, level = ?, updated_at = ? WHERE id = ?')
+    .run(displayName, email, level, Date.now(), req.session.userId);
+  const user = await db.prepare('SELECT id, username, display_name, email, level, is_admin FROM users WHERE id = ?').get(req.session.userId);
+  res.json({ ok: true, user });
 });
 
 module.exports = { router, requireLogin, requireAdmin };

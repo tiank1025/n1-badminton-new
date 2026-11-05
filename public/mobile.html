@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>N1 · Check-in</title>
+<link rel="stylesheet" href="/common.css">
+<style>
+  /* Mobile-first: big tap targets, one column, no tiny text. */
+  body { background: #f6f7f8; padding-bottom: 32px; }
+  .m-wrap { max-width: 520px; margin: 0 auto; padding: 16px 14px; }
+  .m-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+  .m-brand { font-weight: 800; font-size: 18px; letter-spacing: .4px; color: var(--n-700); }
+  .m-user { font-size: 13px; color: var(--n-500); }
+  .m-user strong { color: var(--n-700); }
+
+  .m-card { background: #fff; border-radius: 18px; padding: 20px; margin-bottom: 14px;
+            box-shadow: 0 2px 10px rgba(15,23,42,.06); }
+  .m-title { font-size: 22px; font-weight: 800; line-height: 1.25; color: var(--n-700); }
+  .m-meta { margin-top: 8px; font-size: 15px; color: var(--n-600); line-height: 1.7; }
+  .m-meta .row { display: flex; gap: 8px; align-items: flex-start; }
+  .m-meta .ico { width: 20px; flex: 0 0 20px; }
+  .m-loc { font-weight: 600; color: var(--n-700); }
+
+  .m-status { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px;
+              padding: 10px 14px; border-radius: 12px; font-size: 15px; font-weight: 700; }
+  .st-ok    { background: #e8f5ec; color: #15803d; }
+  .st-wait  { background: #fff4e5; color: #b45309; }
+  .st-none  { background: var(--n-100); color: var(--n-600); }
+  .st-live  { background: #fdecea; color: #b02a1f; }
+
+  /* 56px tall buttons — comfortable thumbs, never a small link. */
+  .m-btn { display: flex; align-items: center; justify-content: center; gap: 10px;
+           width: 100%; min-height: 58px; border: 0; border-radius: 14px;
+           font-size: 17px; font-weight: 800; cursor: pointer;
+           margin-top: 12px; text-decoration: none; box-sizing: border-box; }
+  .m-btn-primary { background: var(--accent-grad); color: #fff;
+                   box-shadow: 0 6px 18px rgba(123,166,150,.35); }
+  .m-btn-primary:active { transform: scale(.98); }
+  .m-btn-ghost { background: var(--n-100); color: var(--n-700); }
+  .m-btn-danger { background: #fff; color: #b02a1f; border: 2px solid #f3c9c5; }
+  .m-btn[disabled] { opacity: .55; }
+
+  .m-hint { margin-top: 10px; font-size: 13px; color: var(--n-500); text-align: center; line-height: 1.6; }
+  .m-err { margin-top: 10px; font-size: 14px; color: #b02a1f; background: #fdecea;
+           padding: 10px 12px; border-radius: 10px; }
+
+  .m-section { font-size: 12px; font-weight: 800; letter-spacing: .6px;
+               text-transform: uppercase; color: var(--n-500); margin: 18px 2px 8px; }
+
+  /* Live queue / courts */
+  .court-row { display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+               background: #fff; border-radius: 14px; margin-bottom: 8px;
+               box-shadow: 0 1px 6px rgba(15,23,42,.05); }
+  .court-no { width: 42px; height: 42px; flex: 0 0 42px; border-radius: 12px;
+              background: var(--n-100); color: var(--n-700); font-weight: 800;
+              display: flex; align-items: center; justify-content: center; font-size: 17px; }
+  .court-no.playing { background: #fdecea; color: #b02a1f; }
+  .court-players { flex: 1; font-size: 15px; font-weight: 600; color: var(--n-700); line-height: 1.5; }
+  .queue-line { background: #fff; border-radius: 14px; padding: 16px; font-size: 15px;
+                color: var(--n-600); box-shadow: 0 1px 6px rgba(15,23,42,.05); }
+  .queue-line strong { color: var(--n-700); }
+
+  .notif { background: #fffbea; border: 1px solid #f6e3a1; border-radius: 14px;
+           padding: 14px 16px; margin-bottom: 12px; }
+  .notif-title { font-weight: 800; color: #8a6d1f; font-size: 15px; }
+  .notif-body { margin-top: 6px; font-size: 14px; color: #6b5716; white-space: pre-line; line-height: 1.6; }
+  .notif-close { margin-top: 10px; font-size: 13px; color: #8a6d1f; text-decoration: underline;
+                 background: none; border: 0; padding: 0; cursor: pointer; }
+
+  .m-link { display: block; text-align: center; margin-top: 16px; font-size: 14px;
+            color: var(--n-500); text-decoration: none; }
+  .toast { position: fixed; left: 14px; right: 14px; bottom: 20px; background: #0f172a;
+           color: #fff; border-radius: 14px; padding: 16px 18px; font-size: 15px;
+           box-shadow: 0 8px 24px rgba(15,23,42,.3); display: none; z-index: 20; }
+  .toast.show { display: block; }
+</style>
+<script src="/i18n.js?v=3"></script>
+</head>
+<body>
+<div class="m-wrap">
+  <div class="m-header">
+    <div class="m-brand">🏸 N1 Badminton</div>
+    <div class="m-user" id="m-user"></div>
+  </div>
+
+  <div id="notice-area"></div>
+  <div id="main">
+    <div class="m-card"><div class="m-meta" data-i18n-en="Loading…" data-i18n-zh="正在加载…">Loading…</div></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+let eventId = Number(params.get('event')) || null;
+let me = null;
+let eventData = null;
+let myReg = null;
+let myWait = null;
+let socket = null;
+
+const $ = id => document.getElementById(id);
+const money = c => 'AUD$' + ((c || 0) / 100).toFixed(2);
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+function fmtDate(d) {
+  if (!d) return '';
+  const dt = new Date(d + 'T00:00:00');
+  if (isNaN(dt)) return d;
+  return dt.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+}
+
+function timeStr(ts) {
+  return new Date(ts).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+}
+
+async function boot() {
+  const meR = await fetch('/api/auth/me');
+  me = meR.ok ? await meR.json() : null;
+  if (!me) {
+    $('m-user').innerHTML = `<a href="/login" style="color:var(--mg-700);font-weight:700;">${t('Log in', '登录')}</a>`;
+    $('main').innerHTML = `<div class="m-card">
+      <div class="m-title">${t('Please log in first', '请先登录')}</div>
+      <div class="m-meta">${t('Please log in to check in.', '扫码签到需要先登录账号。')}</div>
+      <a class="m-btn m-btn-primary" href="/login">${t('Log in', '登录')}</a>
+    </div>`;
+    return;
+  }
+  $('m-user').innerHTML = `<strong>${me.display_name}</strong>` +
+    (me.is_admin ? ` · ${t('Admin', '管理员')}` : '');
+
+  await loadEvent();
+  await loadNotifications();
+  connectRealtime();
+}
+
+async function loadEvent() {
+  const evR = await fetch('/api/events');
+  const events = evR.ok ? await evR.json() : [];
+  if (!eventId) {
+    const active = events.find(e => e.status === 'active');
+    const open = events
+      .filter(e => e.status === 'open')
+      .sort((a, b) => String(a.event_date).localeCompare(String(b.event_date)))[0];
+    eventId = (active || open || {}).id || null;
+  }
+  if (!eventId) {
+    $('main').innerHTML = `<div class="m-card"><div class="m-meta">${t('No events available right now.', '暂时没有可签到或报名的活动。')}</div>
+      <a class="m-btn m-btn-ghost" href="/events">${t('All events', '查看活动')}</a></div>`;
+    return;
+  }
+  await refresh();
+}
+
+async function refresh() {
+  // Event detail (counts, cancel window) + my own registration.
+  const [detailR, evR, mineR] = await Promise.all([
+    fetch(`/api/events/${eventId}/registrations`),
+    fetch(`/api/events/${eventId}`),
+    fetch('/api/registrations/my?include_finished=1'),
+  ]);
+  const detail = detailR.ok ? await detailR.json() : {};
+  eventData = detail.event || (evR.ok ? await evR.json() : null) || {};
+
+  // Figure out seat-availability. Admins get raw numbers; regular users only
+  // get the pre-computed boolean — but both must render the same button state.
+  if (detail.capacity != null && detail.regCount != null) {
+    // admin view
+    lastRegCount = Number(detail.regCount || 0);
+    detailIsFull = () => lastRegCount >= (detail.capacity || 33);
+  } else {
+    // regular user view (or anonymous)
+    lastRegCount = -1; // deliberately don't expose to UI
+    detailIsFull = () => !!detail.is_full;
+  }
+
+  const mine = mineR.ok ? (await mineR.json()).registrations || [] : [];
+  myReg = mine.find(r => r.event_id === Number(eventId)) || detail.registration || null;
+
+  // Admin payload returns the whole waitlist; regular users get their own entry.
+  if (detail.waitlistEntry) {
+    myWait = detail.waitlistEntry;
+  } else if (Array.isArray(detail.waitlist)) {
+    myWait = detail.waitlist.find(w => w.user_id === me.id) || null;
+  } else {
+    myWait = null;
+  }
+  render();
+}
+
+function statusBlock() {
+  const checked = myReg && myReg.checked_in_at;
+  if (checked) {
+    return `<div class="m-status st-ok">✅ 已签到 · Checked in ${timeStr(myReg.checked_in_at)}</div>`;
+  }
+  if (myReg) {
+    return `<div class="m-status st-ok">✅ ${t('Registered', '报名成功')}</div>`;
+  }
+  if (myWait) {
+    return `<div class="m-status st-wait">⏳ 候补中 · Waitlist #${myWait.position || ''}</div>`;
+  }
+  return `<div class="m-status st-none">${t('Not registered', '尚未报名')}</div>`;
+}
+
+function actionsBlock() {
+  const isOpen = eventData.status === 'open';
+  if (myReg && myReg.checked_in_at) {
+    return `<a class="m-btn m-btn-ghost" href="/board?eventId=${eventId}">📊 查看场地队列 / Courts</a>`;
+  }
+  if (myReg) {
+    return `<button class="m-btn m-btn-primary" onclick="checkIn()">🙋 我已到场 · Check in</button>
+            <button class="m-btn m-btn-danger" onclick="cancelReg()">取消报名 / Cancel</button>`;
+  }
+  if (myWait) {
+    return `<button class="m-btn m-btn-danger" onclick="leaveWaitlist()">离开候补 / Leave waitlist</button>`;
+  }
+  if (!isOpen) {
+    return `<button class="m-btn m-btn-ghost" disabled>报名未开放 / Registration closed</button>`;
+  }
+  // Prefer the server-computed boolean (regular-user view); fall back to
+  // counting against capacity (admin view, where both numbers are present).
+  const full = detailIsFull();
+  return `<button class="m-btn m-btn-primary" onclick="register('activity')">
+            ${full ? t('Join waitlist', '加入候补') : t('Register now', '立即报名')} — Social ${money(eventData.fee_social_cents)}
+          </button>
+          ${eventData.training_enabled === 0 ? '' : `<button class="m-btn m-btn-ghost" onclick="register('training_and_activity')">
+            ${t('Training + Social', '训练 + 社交')} — ${money(eventData.fee_training_cents)}
+          </button>`}`;
+}
+
+let lastRegCount = 0;
+let detailIsFull = () => false;
+function detailRegCount() { return lastRegCount; }
+
+function render() {
+  const full = detailIsFull();
+  const badge = eventData.status === 'active'
+    ? '<div class="m-status st-live">🔴 活动进行中 · Live now</div>' : '';
+  $('main').innerHTML = `
+    <div class="m-card">
+      <div class="m-title">${eventData.title || 'Event'}</div>
+      <div class="m-meta">
+        <div class="row"><span class="ico">📅</span><span>${fmtDate(eventData.event_date)} · ${eventData.start_time || ''}–${eventData.end_time || ''}</span></div>
+        ${eventData.location ? `<div class="row"><span class="ico">📍</span><span class="m-loc">${eventData.location}</span></div>` : ''}
+        <div class="row"><span class="ico">👥</span><span>${full ? '满员 · Full' : '报名开放 · Open'}</span></div>
+      </div>
+      ${statusBlock()}
+      ${badge}
+      ${actionsBlock()}
+      <div class="m-hint" id="hint"></div>
+    </div>
+    <div class="m-section">${t('Live status', '现场状态')}</div>
+    <div id="live"><div class="queue-line">${t('Connecting to the live queue…', '连接实时队列…')}</div></div>
+    <a class="m-link" href="/events">${t('My events', '我的活动')} →</a>
+    <a class="m-link" href="#" onclick="setEmail(event)">
+      📧 ${me.email ? t('Email alerts:', '邮件通知：') + ' ' + me.email : t('Add email for waitlist alerts', '设置邮件通知')}
+    </a>
+  `;
+  paintLive();
+}
+
+// ── Actions ─────────────────────────────────────────────
+let actionLoading = false;
+
+async function post(url, body, method = 'POST') {
+  if (actionLoading) return null;
+  actionLoading = true;
+  try {
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      $('hint') && ($('hint').textContent = data.error || t('Action failed', '操作失败'));
+      return null;
+    }
+    return data;
+  } finally {
+    actionLoading = false;
+  }
+}
+
+async function register(regType) {
+  const data = await post(`/api/events/${eventId}/registrations`, { reg_type: regType });
+  if (!data) return;
+  if (data.waitlisted) {
+    toast(t('The event is full — you are on the waitlist. We will notify you when a spot opens.',
+            '名额已满，你已加入候补。有空位会自动通知你。'));
+  } else {
+    toast(t('Registration confirmed!', '报名成功！'));
+  }
+  await refresh();
+}
+
+async function checkIn() {
+  const data = await post(`/api/events/${eventId}/checkin`, {});
+  if (!data) return;
+  toast(data.alreadyCheckedIn
+    ? t('You are already checked in', '你已经签到过了')
+    : t('Checked in — have a great game!', '签到成功，祝你玩得开心！'));
+  await refresh();
+}
+
+async function cancelReg() {
+  if (!myReg) return;
+  if (!confirm(t('Cancel your registration? Your spot will be released to the waitlist.',
+                 '确定取消报名吗？取消后名额会释放给候补名单。'))) return;
+  const data = await post(`/api/registrations/${myReg.id}`, null, 'DELETE');
+  if (!data) return;
+  toast(data.promoted
+    ? t('Cancelled — the spot has been released to the next person on the waitlist.',
+        '已取消，名额已自动转给候补球员。')
+    : t('Registration cancelled.', '已取消报名。'));
+  await refresh();
+}
+
+async function leaveWaitlist() {
+  if (!myWait) return;
+  if (!confirm(t('Leave the waitlist?', '确定离开候补名单吗？'))) return;
+  const data = await post(`/api/registrations/waitlist/${myWait.id}`, null, 'DELETE');
+  if (!data) return;
+  toast(t('You have left the waitlist.', '已离开候补名单。'));
+  await refresh();
+}
+
+// Optional email address, used only for waitlist promotion alerts.
+async function setEmail(e) {
+  e.preventDefault();
+  const next = prompt(
+    t('Email for waitlist promotion alerts (leave blank to disable):', '候补转正时发送邮件通知（留空则关闭）：'),
+    me.email || ''
+  );
+  if (next === null) return;
+  const data = await post('/api/auth/email', { email: next.trim() }, 'PATCH');
+  if (!data) { toast(t('Invalid email address', '邮箱格式不正确')); return; }
+  me.email = data.email;
+  toast(data.email ? t('Email notifications enabled', '邮件通知已开启') : t('Email notifications disabled', '邮件通知已关闭'));
+  render();
+}
+
+// ── Live queue ──────────────────────────────────────────
+let board = null;
+
+function connectRealtime() {
+  if (socket) return;
+  socket = io();
+  socket.on('state_update', s => { board = s; paintLive(); });
+  socket.on('notification', n => {
+    toast(n.title);
+    loadNotifications();
+  });
+}
+
+function paintLive() {
+  const el = $('live');
+  if (!el) return;
+  if (!board) { el.innerHTML = `<div class="queue-line">${t('Connecting to the live queue…', '连接实时队列…')}</div>`; return; }
+
+  const name = me.display_name;
+  const courts = Object.entries(board.courts || {})
+    .filter(([, c]) => c && c.playing)
+    .map(([id, c]) => `<div class="court-row">
+        <div class="court-no playing">${id}</div>
+        <div class="court-players">${(c.players || []).join(' · ') || '—'}</div>
+      </div>`);
+
+  // My position: on a court, in the queue, or neither.
+  let mineHtml = '';
+  const myCourt = Object.entries(board.courts || {})
+    .find(([, c]) => c && (c.players || []).includes(name));
+  if (myCourt) {
+    const status = myCourt[1].playing ? t('in play', '正在比赛') : t('up next', '准备上场');
+    mineHtml = `<div class="queue-line" style="margin-bottom:8px;">🏸 ${t('You are on court', '你在')} <strong>${myCourt[0]}</strong> — ${status}</div>`;
+  } else {
+    const idx = (board.queue || []).indexOf(name);
+    if (idx >= 0) {
+      mineHtml = `<div class="queue-line" style="margin-bottom:8px;">⏳ ${t('You are #', '你在候补队列第')} <strong>${idx + 1}</strong> ${t(`in the queue (${idx} groups ahead)`, `位（还有 ${idx} 组在你前面）`)}</div>`;
+    } else {
+      mineHtml = `<div class="queue-line" style="margin-bottom:8px;">${t('You are not in the venue queue yet — check in with an organiser when you arrive.', '你还没有进入现场队列 — 到场后向管理员报到即可加入。')}</div>`;
+    }
+  }
+
+  el.innerHTML = mineHtml +
+    (courts.length ? courts.join('') : `<div class="queue-line">${t('No courts are in play right now', '目前没有正在进行的场地')}</div>`) +
+    `<a class="m-btn m-btn-ghost" href="/board?eventId=${eventId}">${t('Open full board', '打开完整对战板')} / Board</a>`;
+}
+
+// ── Notifications ───────────────────────────────────────
+async function loadNotifications() {
+  const r = await fetch('/api/notifications/my');
+  if (!r.ok) return;
+  const { notifications = [] } = await r.json();
+  const unread = notifications.filter(n => !n.read_at).slice(0, 3);
+  if (!unread.length) { $('notice-area').innerHTML = ''; return; }
+  $('notice-area').innerHTML = unread.map(n => `
+    <div class="notif">
+      <div class="notif-title">🔔 ${n.title}</div>
+      ${n.body ? `<div class="notif-body">${n.body}</div>` : ''}
+      <button class="notif-close" onclick="readNotif(${n.id})">知道了 / Dismiss</button>
+    </div>`).join('');
+}
+
+async function readNotif(id) {
+  await fetch(`/api/notifications/${id}/read`, { method: 'POST' });
+  loadNotifications();
+}
+
+// Counts come from the registrations endpoint (admin vs user shape differs).
+boot();
+</script>
+</body>
+</html>

@@ -182,6 +182,7 @@
     .modal-head button { border:none; background:none; font-size:18px; cursor:pointer; }
     .modal-box img { width:100%; border-radius:10px; display:block; }
   </style>
+  <script src="/i18n.js?v=3"></script>
 </head>
 <body>
   <div class="app-header">
@@ -191,6 +192,8 @@
     </div>
     <div>
       <a href="/board">📊 Live Board</a>
+      <a href="/matches">🏸 Matches</a>
+      <a href="/profile">👤 Profile</a>
       <a href="/">ℹ️ Info</a>
       <a href="#" id="logout">Logout</a>
     </div>
@@ -244,6 +247,14 @@
             <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Training + Social fee ($)</label>
             <input id="ev-fee-training" type="number" min="0" step="0.5" value="45">
           </div>
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Location / 地点 (shown on the check-in page)</label>
+          <input id="ev-location" type="text" placeholder="e.g. Sydney Olympic Park, Court 1-5">
+        </div>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Capacity / 名额</label>
+          <input id="ev-capacity" type="number" min="1" max="500" value="33" placeholder="33">
         </div>
         <div style="margin-bottom:12px;">
           <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Payment link (optional — Stripe Payment Link / Apple Pay)</label>
@@ -304,6 +315,79 @@
         <div class="section-title">Registration list</div>
         <div id="detail-regs"></div>
       </section>
+
+      <section class="d-section">
+        <div class="flex-between">
+          <div class="section-title" style="margin:0;">📋 Matches Recorded</div>
+          <button class="btn btn-primary btn-sm" onclick="openMatchEntry()">＋ Record Match</button>
+        </div>
+        <div id="detail-matches"></div>
+      </section>
+    </div>
+
+    <!-- ── Match entry modal ── -->
+    <div class="modal hidden" id="match-modal" onclick="if(event.target===this) closeMatchEntry()">
+      <div class="modal-box">
+        <div class="modal-head">
+          <span>🏸 Record a Doubles Match</span>
+          <button onclick="closeMatchEntry()">✕</button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Match Date</label>
+            <input id="m-date" type="date">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Time (optional)</label>
+            <input id="m-time" type="time">
+          </div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr auto 1fr; gap:10px; align-items:center;">
+          <div style="border:2px solid var(--mg-300); border-radius:12px; padding:12px;">
+            <div style="font-weight:800; color:var(--mg-700); margin-bottom:8px;">Team A</div>
+            <div id="m-teama">
+              <div style="margin-bottom:6px;"><div id="m-ta1-name" class="text-muted" style="font-size:12px;">Pick player 1…</div><input type="hidden" id="m-ta1-id"></div>
+              <div><div id="m-ta2-name" class="text-muted" style="font-size:12px;">Pick player 2…</div><input type="hidden" id="m-ta2-id"></div>
+            </div>
+          </div>
+          <div style="font-size:20px; font-weight:900; color:var(--n-400);">VS</div>
+          <div style="border:2px solid var(--mp-300); border-radius:12px; padding:12px;">
+            <div style="font-weight:800; color:var(--mp-700); margin-bottom:8px;">Team B</div>
+            <div id="m-teamb">
+              <div style="margin-bottom:6px;"><div id="m-tb1-name" class="text-muted" style="font-size:12px;">Pick player 1…</div><input type="hidden" id="m-tb1-id"></div>
+              <div><div id="m-tb2-name" class="text-muted" style="font-size:12px;">Pick player 2…</div><input type="hidden" id="m-tb2-id"></div>
+            </div>
+          </div>
+        </div>
+
+        <div id="m-picker" style="margin-top:12px;">
+          <input type="search" id="m-search" placeholder="Type a name to find players…" style="width:100%;" oninput="onMatchSearch(this.value)">
+          <div id="m-search-results" style="max-height:160px; overflow-y:auto; margin-top:6px;"></div>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:10px; margin-top:12px;">
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Score A</label>
+            <input id="m-score-a" type="number" min="0" max="50" placeholder="0-50">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Score B</label>
+            <input id="m-score-b" type="number" min="0" max="50" placeholder="0-50">
+          </div>
+          <div>
+            <label style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase;">Winner</label>
+            <select id="m-winner">
+              <option value="">未记录</option>
+              <option value="A">Team A</option>
+              <option value="B">Team B</option>
+            </select>
+          </div>
+          <div style="display:flex; align-items:flex-end;">
+            <button class="btn btn-primary" style="width:100%;" onclick="submitMatchEntry()">Save</button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="toast" id="toast"></div>
@@ -330,8 +414,7 @@
     let currentEventId = null;
 
     function money(cents) {
-      const v = (Number(cents) || 0) / 100;
-      return '$' + (Number.isInteger(v) ? v : v.toFixed(2));
+      return 'AUD$' + ((Number(cents) || 0) / 100).toFixed(2);
     }
     function payBadge(status) {
       const label = { paid: 'Paid', unpaid: 'Unpaid', submitted: 'Awaiting review', waived: 'Waived' }[status] || status;
@@ -342,7 +425,7 @@
       const r = await fetch('/api/auth/me');
       const u = await r.json();
       if (!u || !u.is_admin) { window.location.href = '/login'; return; }
-      document.getElementById('user-info').textContent = `Logged in as ${u.display_name}`;
+      document.getElementById('user-info').textContent = `${t('Logged in as ', '当前登录：')}${u.display_name}`;
     }
 
     // ── List view ──────────────────────────────────────────
@@ -377,12 +460,12 @@
         `${allEvents.length} event(s)${live ? ` · ${live} live now` : ''}`;
 
       if (!allEvents.length) {
-        list.innerHTML = '<div class="card"><div class="empty-state">No events yet — click “＋ New Event” to create one.</div></div>';
+        list.innerHTML = `<div class="card"><div class="empty-state">${t('No events yet — click “＋ New Event” to create one.', '还没有活动，点击“＋ 新建活动”创建。')}</div></div>`;
         updateFilterChips();
         return;
       }
       if (!items.length) {
-        list.innerHTML = '<div class="card"><div class="empty-state">No events match this filter.</div></div>';
+        list.innerHTML = `<div class="card"><div class="empty-state">${t('No events match this filter.', '没有符合筛选条件的活动。')}</div></div>`;
         updateFilterChips();
         return;
       }
@@ -441,6 +524,7 @@
       document.getElementById('admin-add-results').innerHTML = '';
       renderDetailHeader(ev);
       loadRegs(id);
+      renderMatchesSection();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
@@ -458,9 +542,10 @@
       const taken = ev.reg_count || 0;
       document.getElementById('detail-head').innerHTML = `
         <div class="detail-title">${ev.title}</div>
-        <div class="detail-sub">
+        <div class="detail-fees">
           <span>${ev.event_date} · ${ev.start_time}–${ev.end_time}</span>
-          <span class="badge badge-${ev.status}">${ev.status}</span>
+          ${ev.location ? `<span>📍 ${ev.location}</span>` : ''}
+          <span class="badge badge-${ev.status}">${({draft:t('Draft','草稿'),open:t('Open','开放报名'),closed:t('Closed','已关闭'),active:t('Active','进行中'),finished:t('Finished','已结束')})[ev.status] || ev.status}</span>
         </div>
         <div class="detail-fees" id="cap-line">
           Capacity: <strong>${taken}/${cap}</strong>${taken >= cap ? ' · <span style="color:#b91c1c;font-weight:800;">FULL</span>' : ''}
@@ -501,8 +586,61 @@
           html += `<a class="btn btn-primary" href="/board?eventId=${id}&activate=1">📊 Activate &amp; Open Board</a>`;
           break;
       }
+      html += `<button class="btn btn-secondary" onclick="showCheckInQr(${id})">📱 签到二维码</button>`;
+      html += `<button class="btn btn-secondary" onclick="editCapacity(${id})">⚙️ Capacity</button>`;
       html += `<button class="btn btn-danger" onclick="deleteEvent(${id})">Delete Event</button>`;
       actions.innerHTML = html;
+    }
+
+    // Quick capacity edit — prompt inline, PATCH in the background.
+    async function editCapacity(eventId) {
+      const ev = await fetch(`/api/events/${eventId}`).then(r => r.json());
+      const cur = ev.capacity || 33;
+      const taken = ev.reg_count || 0;
+      const raw = prompt(
+        t(`Set capacity (currently ${taken}/${cur}, range 1-500):`, `设置名额（当前 ${taken}/${cur}，范围 1-500）：`),
+        String(cur)
+      );
+      if (raw === null) return;
+      const n = parseInt(raw, 10);
+      if (!Number.isFinite(n) || n < 1 || n > 500) { alert(t('Capacity must be between 1 and 500', '名额必须在 1 到 500 之间')); return; }
+      if (n < taken) {
+        const ok = confirm(t(
+          `${taken} people are currently registered. Reducing the capacity to ${n} will let waitlisted players move up, but will not remove anyone already registered. Continue?`,
+          `当前已报名 ${taken} 人，改到 ${n} 人会让候补玩家升级，但不会自动踢掉已报名球员。确认？`
+        ));
+        if (!ok) return;
+      }
+      const r = await fetch(`/api/events/${eventId}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', credentials: 'same-origin' },
+        body: JSON.stringify({ capacity: n }),
+      });
+      if (!r.ok) { const d = await r.json(); alert('Failed: ' + (d.error || r.status)); return; }
+      toast('✅ Capacity updated to ' + n);
+      // Refresh the detail view so the Capacity header, stats row and list
+      // all update immediately — no page reload needed.
+      await openEvent(eventId);
+      // Also refresh the list sidebar so the event-card counts stay accurate.
+      loadEvents();
+    }
+
+    // Venue QR code: players scan it, land on /m and self check in.
+    function showCheckInQr(eventId) {
+      const url = `${location.origin}/m?event=${eventId}`;
+      const overlay = document.createElement('div');
+      overlay.id = 'qr-overlay';
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;z-index:60;padding:20px;';
+      overlay.onclick = e => { if (e.target === overlay) overlay.remove(); };
+      overlay.innerHTML = `
+        <div style="background:#fff;border-radius:20px;padding:24px;max-width:380px;text-align:center;">
+          <div style="font-size:18px;font-weight:800;color:#0f172a;">📱 现场签到二维码</div>
+          <div style="font-size:12px;color:#64748b;margin-top:6px;">把这个二维码打印出来贴在场地，球员扫码即可自助签到。</div>
+          <img src="/api/events/${eventId}/qrcode" alt="Check-in QR" style="width:260px;height:260px;margin:16px auto 0;display:block;">
+          <div style="font-size:11px;color:#94a3b8;margin-top:10px;word-break:break-all;">${url}</div>
+          <button class="btn btn-primary btn-block mt-16" onclick="window.open('${url}','_blank')">打开手机签到页</button>
+          <button class="btn btn-secondary btn-block mt-8" onclick="document.getElementById('qr-overlay').remove()">关闭</button>
+        </div>`;
+      document.body.appendChild(overlay);
     }
 
     async function loadRegs(eventId) {
@@ -527,6 +665,7 @@
         <div class="stat"><div class="num">${activityCount}</div><div class="lbl">Social Only</div></div>
         <div class="stat"><div class="num">${trainingCount}</div><div class="lbl">Training+Social</div></div>
         <div class="stat"><div class="num">${waitlist.length}</div><div class="lbl">Waitlist</div></div>
+        <div class="stat"><div class="num">${d.checkedInCount || 0}</div><div class="lbl">Checked in</div></div>
         <div class="stat"><div class="num">${ps.paid}</div><div class="lbl">Paid</div></div>
         <div class="stat"><div class="num">${ps.unpaid + ps.submitted}</div><div class="lbl">Outstanding</div></div>
       `;
@@ -584,7 +723,8 @@
           ${regs.map(r => `
             <div class="reg-row">
               <div class="reg-info">
-                <div class="reg-name">${r.display_name} ${payBadge(r.payment_status || 'unpaid')}</div>
+                <div class="reg-name">${r.display_name} ${payBadge(r.payment_status || 'unpaid')}
+                  ${r.checked_in_at ? '<span style="background:#e8f5ec;color:#15803d;border-radius:999px;padding:2px 8px;font-size:11px;font-weight:800;">✅ 已签到</span>' : ''}</div>
                 <div class="reg-meta">
                   ${r.level} · ${r.reg_type === 'activity' ? 'Social' : 'Training + Social'}
                   ${r.reg_type === 'training_and_activity'
@@ -740,10 +880,14 @@
         alert('Please enter valid fees'); return;
       }
       const paymentLink = document.getElementById('ev-pay-link').value.trim();
+      const location = document.getElementById('ev-location').value.trim();
+      const capacity = parseInt(document.getElementById('ev-capacity').value, 10);
       try {
         const r = await fetch('/api/events', {
           method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
           body: JSON.stringify({ title, event_date: date, start_time: startTime, end_time: endTime,
+                                 location: location || null,
+                                 capacity: Number.isFinite(capacity) ? capacity : 33,
                                  fee_social_cents: feeSocial, fee_training_cents: feeTraining,
                                  payment_link: paymentLink || null })
         });
@@ -753,6 +897,8 @@
       document.getElementById('ev-title').value = '';
       document.getElementById('ev-date').value = '';
       document.getElementById('ev-pay-link').value = '';
+      document.getElementById('ev-location').value = '';
+      document.getElementById('ev-capacity').value = '33';
       document.getElementById('toggle-create').textContent = '＋ New Event';
       document.getElementById('create-card').classList.add('hidden');
       loadEvents();
@@ -823,6 +969,190 @@
       navigator.clipboard?.writeText(text)
         .then(() => toast(`📋 Copied ${rows.length} unpaid name(s)`))
         .catch(() => toast('❌ Copy failed — select the names manually', false));
+    }
+
+    // ── Match recording ──────────────────────────────────
+    let matchPickerSlot = null; // 'ta1' | 'ta2' | 'tb1' | 'tb2'
+    let matchSearchTimer = null;
+
+    function renderMatchesSection() {
+      const container = document.getElementById('detail-matches');
+      if (!container) return;
+      if (!currentEventId) { container.innerHTML = ''; return; }
+      loadEventMatches(currentEventId);
+    }
+
+    async function loadEventMatches(eventId) {
+      const container = document.getElementById('detail-matches');
+      if (!container) return;
+      try {
+        const r = await fetch(`/api/matches?event_id=${eventId}`);
+        if (!r.ok) { container.innerHTML = '<div class="text-muted" style="font-size:12px;">Cannot load matches</div>'; return; }
+        const d = await r.json();
+        const matches = d.matches || [];
+        if (!matches.length) {
+          container.innerHTML = '<div class="text-muted" style="font-size:12px;padding:12px 0;">No matches recorded yet — click "＋ Record Match" after a game finishes.</div>';
+          return;
+        }
+        container.innerHTML = matches.map(m => {
+          const winLabel = m.winner ? `Team ${m.winner} Won` : '未记录';
+          const score = m.score_a != null ? `${m.score_a} – ${m.score_b}` : '';
+          const ta1 = m.team_a_p1_name, ta2 = m.team_a_p2_name;
+          const tb1 = m.team_b_p1_name, tb2 = m.team_b_p2_name;
+          return `
+            <div class="reg-row">
+              <div class="reg-info" style="flex:1; min-width:0;">
+                <div style="font-size:14px; font-weight:800; color:var(--n-800);">
+                  ${ta1} &amp; ${ta2}
+                  <span style="color:var(--n-400); font-weight:400;">vs.</span>
+                  ${tb1} &amp; ${tb2}
+                </div>
+                <div class="reg-meta">
+                  ${m.match_date}${m.match_time ? ' · ' + m.match_time : ''}
+                  ${score ? ' · ' + score : ''}
+                  · <span style="font-weight:700;">${winLabel}</span>
+                </div>
+              </div>
+              <div class="reg-actions">
+                <button class="btn btn-secondary btn-sm" onclick="editMatch(${m.id})">Edit</button>
+                <button class="btn btn-danger btn-sm" onclick="deleteMatch(${m.id})">Delete</button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        container.innerHTML = '<div class="text-muted" style="font-size:12px;">Error loading matches</div>';
+      }
+    }
+
+    function openMatchEntry() {
+      // Reset form
+      document.getElementById('m-date').value = '';
+      document.getElementById('m-time').value = '';
+      document.getElementById('m-score-a').value = '';
+      document.getElementById('m-score-b').value = '';
+      document.getElementById('m-winner').value = '';
+      document.getElementById('m-search').value = '';
+      document.getElementById('m-search-results').innerHTML = '';
+      clearMatchPlayer('ta1'); clearMatchPlayer('ta2');
+      clearMatchPlayer('tb1'); clearMatchPlayer('tb2');
+      matchPickerSlot = null;
+
+      // Default match date to event date if we have it
+      if (currentEventId && allEvents) {
+        const ev = allEvents.find(e => e.id === currentEventId);
+        if (ev) document.getElementById('m-date').value = ev.event_date;
+      }
+      document.getElementById('match-modal').classList.remove('hidden');
+    }
+
+    function closeMatchEntry() {
+      document.getElementById('match-modal').classList.add('hidden');
+    }
+
+    function clearMatchPlayer(slot) {
+      document.getElementById(`m-${slot}-id`).value = '';
+      document.getElementById(`m-${slot}-name`).textContent = `Pick player ${slot[2]}…`;
+      document.getElementById(`m-${slot}-name`).className = 'text-muted';
+    }
+
+    function onMatchSearch(value) {
+      clearTimeout(matchSearchTimer);
+      const q = value.trim();
+      const resultsEl = document.getElementById('m-search-results');
+      if (q.length < 2) { resultsEl.innerHTML = ''; return; }
+      matchSearchTimer = setTimeout(async () => {
+        try {
+          const r = await fetch(`/api/matches/search-user?q=${encodeURIComponent(q)}`);
+          const rows = r.ok ? await r.json() : [];
+          if (!rows.length) { resultsEl.innerHTML = '<div class="text-muted" style="font-size:11px;padding:6px;">No matches</div>'; return; }
+          resultsEl.innerHTML = rows.map(u => {
+            const pickHtml = ['ta1','ta2','tb1','tb2'].map(slot =>
+              `<button class="btn btn-secondary btn-sm" style="padding:2px 6px; margin-left:2px;" onclick="setMatchPlayer('${slot}',${u.id},'${u.display_name}')">→${slot.toUpperCase()}</button>`
+            ).join('');
+            return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--n-100); font-size:13px;">
+              <span><strong>${u.display_name}</strong> <span class="text-muted" style="font-size:11px;">${u.username}</span></span>
+              <span>${pickHtml}</span>
+            </div>`;
+          }).join('');
+        } catch (e) { resultsEl.innerHTML = '<div class="text-muted" style="font-size:11px;">Error</div>'; }
+      }, 250);
+    }
+
+    function setMatchPlayer(slot, id, name) {
+      // Remove from other slots if selected there
+      ['ta1','ta2','tb1','tb2'].forEach(s => {
+        if (s !== slot && document.getElementById(`m-${s}-id`).value === String(id)) {
+          clearMatchPlayer(s);
+        }
+      });
+      document.getElementById(`m-${slot}-id`).value = id;
+      document.getElementById(`m-${slot}-name`).textContent = name;
+      document.getElementById(`m-${slot}-name`).className = '';
+      document.getElementById('m-search').value = '';
+      document.getElementById('m-search-results').innerHTML = '';
+    }
+
+    async function submitMatchEntry() {
+      const date = document.getElementById('m-date').value;
+      const time = document.getElementById('m-time').value;
+      const a1 = Number(document.getElementById('m-ta1-id').value);
+      const a2 = Number(document.getElementById('m-ta2-id').value);
+      const b1 = Number(document.getElementById('m-tb1-id').value);
+      const b2 = Number(document.getElementById('m-tb2-id').value);
+      const scoreA = document.getElementById('m-score-a').value;
+      const scoreB = document.getElementById('m-score-b').value;
+      const winner = document.getElementById('m-winner').value;
+
+      if (!currentEventId) { toast('❌ No event context', false); return; }
+      if (!date) { toast('❌ Match date required', false); return; }
+      if (![a1, a2, b1, b2].every(Number.isInteger)) {
+        toast('❌ Please pick all 4 players', false); return;
+      }
+      if (new Set([a1, a2, b1, b2]).size !== 4) {
+        toast('❌ All players must be distinct', false); return;
+      }
+      const body = {
+        event_id: currentEventId,
+        match_date: date,
+        match_time: time || null,
+        team_a_p1_id: a1, team_a_p2_id: a2,
+        team_b_p1_id: b1, team_b_p2_id: b2,
+        score_a: scoreA ? Number(scoreA) : null,
+        score_b: scoreB ? Number(scoreB) : null,
+        winner: winner || null,
+      };
+      try {
+        const r = await fetch('/api/matches', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify(body),
+        });
+        const d = await r.json().catch(() => ({}));
+        if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
+        closeMatchEntry();
+        toast('✅ Match recorded');
+        renderMatchesSection();
+      } catch (e) { toast('❌ Network error: ' + e.message, false); }
+    }
+
+    async function editMatch(matchId) {
+      // For now, prompt a simple confirmation + soft-delete flow is sufficient.
+      // A full edit UI can come later — the API already supports PATCH.
+      if (!confirm('Edit match? The current UI only supports delete. Delete this match instead?')) return;
+      deleteMatch(matchId);
+    }
+
+    async function deleteMatch(matchId) {
+      if (!confirm('Delete this match record? (Soft-delete — stats will no longer include it.)')) return;
+      try {
+        const r = await fetch(`/api/matches/${matchId}`, {
+          method: 'DELETE', credentials: 'same-origin',
+        });
+        if (!r.ok) { toast('❌ Failed to delete', false); return; }
+        toast('✅ Match deleted');
+        renderMatchesSection();
+      } catch (e) { toast('❌ Network error', false); }
     }
 
     // ── Socket connection for Activate / Finish ────────────

@@ -157,7 +157,7 @@ main.wide { max-width: 1200px; }
 .badge-active { background: var(--mp-100); color: var(--mp-700); }
 
 /* ── Form inputs ──────────────────────────────────────── */
-.form-input, input[type="text"], input[type="password"], input[type="number"], input[type="date"], input[type="time"], input[type="search"], select {
+.form-input, input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="date"], input[type="time"], input[type="search"], select {
   border: 2px solid var(--border);
   border-radius: var(--r-input);
   padding: 10px 14px;

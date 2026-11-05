@@ -6,6 +6,7 @@ const router = express.Router();
 // stopped matching under Express 5 / path-to-regexp v8).
 const registrationsRouter = express.Router();
 const { requireAdmin } = require('./auth');
+const { createNotification } = require('./notifications');
 
 const SLOT_LABELS = ['7:00 – 7:30', '7:30 – 8:00', '8:00 – 8:30', '8:30 – 9:00'];
 const MAX_PER_SLOT = 4;
@@ -68,9 +69,55 @@ function parseCents(value, fallback) {
   return Math.max(0, Math.min(1000000, Math.round(n)));
 }
 
+// ── Waitlist auto-promotion ────────────────────────────
+// When a spot frees up, the earliest waitlisted player is moved into a real
+// registration (fee snapshot taken from the event) and notified in-app + email.
+// Returns null when there is nobody waiting or the event is somehow still full.
+async function promoteNextWaitlist(eventId) {
+  const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
+  if (!ev) return null;
+
+  const taken = (await db.prepare(
+    "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
+  ).get(eventId)).c;
+  if (Number(taken) >= Number(ev.capacity || EVENT_CAPACITY)) return null;
+
+  const entry = await db.prepare(
+    'SELECT * FROM waitlist WHERE event_id = ? ORDER BY created_at ASC, id ASC LIMIT 1'
+  ).get(eventId);
+  if (!entry) return null;
+
+  const now = Date.now();
+  const fee = feeFor(ev, entry.reg_type);
+  const inserted = await db.prepare(
+    `INSERT INTO registrations
+       (event_id, user_id, reg_type, training_slot, fee_cents, payment_status,
+        status, created_at, updated_at)
+     VALUES (?, ?, ?, NULL, ?, 'unpaid', 'registered', ?, ?)`
+  ).run(eventId, entry.user_id, entry.reg_type, fee, now, now);
+  await db.prepare('DELETE FROM waitlist WHERE id = ?').run(entry.id);
+
+  const when = `${ev.event_date} · ${ev.start_time}-${ev.end_time}`;
+  const place = ev.location ? ` · ${ev.location}` : '';
+  const title = `Waitlist promoted: ${ev.title}`;
+  const body = `You have been automatically moved from the waitlist to a confirmed spot.\nWhen: ${when}${place}\nFee: AUD$${(fee / 100).toFixed(2)} (please pay before the event)\nIf you can no longer attend, please cancel at least 24 hours before the event starts.`;
+
+  createNotification({
+    userId: entry.user_id,
+    type: 'waitlist_promoted',
+    title,
+    body,
+    eventId,
+    email: { subject: `[N1 Badminton] ${title}`, text: body },
+  }).catch(e => console.warn('Waitlist notification failed:', e.message));
+
+  return { userId: entry.user_id, registrationId: inserted.lastInsertRowid };
+}
+
 // GET /api/events?status=open
-// `reg_count` lets the dashboard list every event (including history) without
-// one extra request per event.
+// Publicly visible, but admins get full stats (reg_count/capacity) while
+// regular visitors see only the boolean flags (is_full, has_waitlist) so
+// we don't leak exact seat counts to competitors.
 router.get('/', async (req, res) => {
   const { status } = req.query;
   const base = `SELECT e.*,
@@ -82,12 +129,32 @@ router.get('/', async (req, res) => {
   const rows = status
     ? await db.prepare(`${base} WHERE e.status = ? ORDER BY e.event_date ASC`).all(status)
     : await db.prepare(`${base} ORDER BY e.event_date DESC`).all();
+
+  // Figure out if the caller is an admin — never gate the endpoint itself,
+  // just trim the payload for non-admins.
+  let meAdmin = false;
+  if (req.session?.userId) {
+    const u = await db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.session.userId);
+    meAdmin = !!u?.is_admin;
+  }
+
   rows.forEach(r => {
-    r.reg_count = Number(r.reg_count) || 0;
-    r.waitlist_count = Number(r.waitlist_count) || 0;
-    r.capacity = EVENT_CAPACITY;
-    r.is_full = r.reg_count >= EVENT_CAPACITY;
+    const cap = Number(r.capacity) || EVENT_CAPACITY;
+    const regCount = Number(r.reg_count) || 0;
+    const waitlistCount = Number(r.waitlist_count) || 0;
+    r.capacity = cap;
+    r.reg_count = regCount;
+    r.waitlist_count = waitlistCount;
+    r.is_full = regCount >= cap;
+    r.has_waitlist = waitlistCount > 0;
     attachWindow(r);
+
+    if (!meAdmin) {
+      // Strip the exact numbers — admins can still see them.
+      delete r.reg_count;
+      delete r.waitlist_count;
+      delete r.capacity;
+    }
   });
   res.json(rows);
 });
@@ -101,15 +168,22 @@ router.get('/:id', async (req, res) => {
 
 // POST /api/events (admin)
 router.post('/', requireAdmin, async (req, res) => {
-  const { title, event_date, start_time, end_time, registration_open_at, registration_close_at,
-          fee_social_cents, fee_training_cents, payment_link } = req.body || {};
+  const { title, event_date, start_time, end_time, location, registration_open_at, registration_close_at,
+          fee_social_cents, fee_training_cents, payment_link, capacity } = req.body || {};
   if (!title || !event_date) return res.status(400).json({ error: 'title and event_date required' });
   const now = Date.now();
+  const cap = Number(capacity);
+  if (capacity !== undefined && (!Number.isFinite(cap) || cap < 1 || cap > 500)) {
+    return res.status(400).json({ error: 'capacity must be between 1 and 500' });
+  }
   const result = await db.prepare(
-    `INSERT INTO events (title, event_date, start_time, end_time, fee_social_cents, fee_training_cents,
+    `INSERT INTO events (title, event_date, start_time, end_time, location, capacity,
+                         fee_social_cents, fee_training_cents,
                          payment_link, registration_open_at, registration_close_at, status, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?)`
   ).run(title, event_date, start_time || '19:00', end_time || '21:00',
+        location || null,
+        cap || EVENT_CAPACITY,
         parseCents(fee_social_cents, DEFAULT_FEE_SOCIAL),
         parseCents(fee_training_cents, DEFAULT_FEE_TRAINING),
         payment_link || null,
@@ -165,11 +239,20 @@ router.post('/:id/activate', requireAdmin, async (req, res) => {
 
 // PATCH /api/events/:id (admin)
 router.patch('/:id', requireAdmin, async (req, res) => {
-  const { status, registration_open_at, registration_close_at, title, event_date,
-          fee_social_cents, fee_training_cents, payment_link } = req.body || {};
+  const { status, registration_open_at, registration_close_at, title, event_date, location,
+          fee_social_cents, fee_training_cents, payment_link, capacity } = req.body || {};
   const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
   const now = Date.now();
+  let capacitySql = `COALESCE(?, capacity)`;
+  let capacityVal = null;
+  if (capacity !== undefined && capacity !== null && capacity !== '') {
+    const cap = Number(capacity);
+    if (!Number.isFinite(cap) || cap < 1 || cap > 500) {
+      return res.status(400).json({ error: 'capacity must be between 1 and 500' });
+    }
+    capacityVal = Math.round(cap);
+  }
   await db.prepare(
     `UPDATE events SET
       status = COALESCE(?, status),
@@ -177,18 +260,75 @@ router.patch('/:id', requireAdmin, async (req, res) => {
       registration_close_at = COALESCE(?, registration_close_at),
       title = COALESCE(?, title),
       event_date = COALESCE(?, event_date),
+      location = COALESCE(?, location),
       fee_social_cents = COALESCE(?, fee_social_cents),
       fee_training_cents = COALESCE(?, fee_training_cents),
       payment_link = COALESCE(?, payment_link),
+      capacity = ${capacitySql},
       updated_at = ?
      WHERE id = ?`
   ).run(status || null, registration_open_at || null, registration_close_at || null,
-        title || null, event_date || null,
+        title || null, event_date || null, location || null,
         fee_social_cents != null ? parseCents(fee_social_cents, ev.fee_social_cents) : null,
         fee_training_cents != null ? parseCents(fee_training_cents, ev.fee_training_cents) : null,
         payment_link !== undefined ? payment_link : null,
-        now, req.params.id);
+        capacityVal, now, req.params.id);
+  // If capacity increased (or was just set), promote waitlisted players into
+  // the newly freed spot(s). We run it in a loop because a single PATCH may
+  // open up several spots at once.
+  if (capacityVal !== null && capacityVal > (ev.capacity || EVENT_CAPACITY)) {
+    let promoted = null;
+    do { promoted = await promoteNextWaitlist(req.params.id); } while (promoted);
+  }
   res.json({ ok: true });
+});
+
+// GET /api/events/:id/qrcode — SVG QR code pointing at the mobile check-in page.
+// Printed/pinned at the venue so players scan once and self check in.
+router.get('/:id/qrcode', async (req, res) => {
+  const ev = await db.prepare('SELECT id FROM events WHERE id = ?').get(req.params.id);
+  if (!ev) return res.status(404).json({ error: 'Event not found' });
+  const base = process.env.PUBLIC_BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const url = `${base.replace(/\/$/, '')}/m?event=${ev.id}`;
+  try {
+    const QRCode = require('qrcode');
+    const svg = await QRCode.toString(url, {
+      type: 'svg', margin: 2, width: 320,
+      color: { dark: '#0f172a', light: '#ffffff' },
+    });
+    res.type('image/svg+xml').send(svg);
+  } catch (e) {
+    res.status(500).json({ error: 'QR generation failed' });
+  }
+});
+
+// POST /api/events/:id/checkin — player taps "I'm here".
+// Admins may pass { user_id } to check someone in on their behalf.
+router.post('/:id/checkin', async (req, res) => {
+  if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
+  if (!ev) return res.status(404).json({ error: 'Event not found' });
+
+  let targetId = req.session.userId;
+  const requested = req.body?.user_id;
+  if (requested && Number(requested) !== Number(targetId)) {
+    const me = await db.prepare('SELECT is_admin FROM users WHERE id = ?').get(targetId);
+    if (!me?.is_admin) return res.status(403).json({ error: 'Only admins can check in others' });
+    targetId = Number(requested);
+  }
+
+  const reg = await db.prepare(
+    "SELECT * FROM registrations WHERE event_id = ? AND user_id = ? AND status = 'registered'"
+  ).get(req.params.id, targetId);
+  if (!reg) return res.status(404).json({ error: 'No active registration for this event' });
+  if (reg.checked_in_at) {
+    return res.json({ ok: true, alreadyCheckedIn: true, checked_in_at: reg.checked_in_at });
+  }
+
+  const now = Date.now();
+  await db.prepare('UPDATE registrations SET checked_in_at = ?, updated_at = ? WHERE id = ?')
+    .run(now, now, reg.id);
+  res.json({ ok: true, checked_in_at: now });
 });
 
 // GET /api/events/:id/registrations
@@ -233,15 +373,19 @@ router.get('/:id/registrations', async (req, res) => {
     const slotCounts = [0,1,2,3].map(i =>
       regs.filter(r => r.training_slot === i).length
     );
-    // Everyone queued for a spot once the event hit its 33-player cap.
+    // Everyone queued for a spot once the event hit its capacity.
     const waitlist = await db.prepare(`
       SELECT w.*, u.display_name, u.level, u.username
       FROM waitlist w JOIN users u ON w.user_id = u.id
       WHERE w.event_id = ?
       ORDER BY w.created_at ASC
     `).all(req.params.id);
+    // Honour the per-event capacity an admin configured, falling back only when
+    // migrating a database that predates the capacity column.
+    const cap = Number(ev.capacity) || EVENT_CAPACITY;
     res.json({
-      registrations: regs, waitlist, capacity: EVENT_CAPACITY, regCount: regs.length,
+      registrations: regs, waitlist, capacity: cap, regCount: regs.length,
+      checkedInCount: regs.filter(r => r.checked_in_at).length,
       cancelOpen: ev.cancel_open, cancelDeadline: ev.cancel_deadline_ms,
       slotCounts, slotLabels: SLOT_LABELS, maxPerSlot: MAX_PER_SLOT,
       event: ev, event_title: ev.title, paymentSummary,
@@ -265,6 +409,8 @@ router.get('/:id/registrations', async (req, res) => {
     const regCount = (await db.prepare(
       "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
     ).get(req.params.id)).c;
+    const cap = Number(ev.capacity) || EVENT_CAPACITY;
+    const regCountNum = Number(regCount);
     // The user's own waitlist entry (if the event was full when they signed up).
     const entry = await db.prepare(
       'SELECT * FROM waitlist WHERE event_id = ? AND user_id = ?'
@@ -276,9 +422,10 @@ router.get('/:id/registrations', async (req, res) => {
       ).get(req.params.id, entry.created_at)).c;
       waitlistPosition = Number(ahead) + 1;
     }
+    // Regular users only get boolean seat-availability flags, never the exact numbers.
     res.json({
       registration: reg, waitlistEntry: entry ? { ...entry, position: waitlistPosition } : null,
-      capacity: EVENT_CAPACITY, regCount: Number(regCount),
+      is_full: regCountNum >= cap,
       cancelOpen: ev.cancel_open, cancelDeadline: ev.cancel_deadline_ms,
       slotCounts: await Promise.all(slotCounts), slotLabels: SLOT_LABELS,
       maxPerSlot: MAX_PER_SLOT, event: ev, event_title: ev.title,
@@ -363,11 +510,12 @@ router.post('/:id/registrations', async (req, res) => {
 
   const now = Date.now();
 
-  // Event full (33 registered)? Queue the user instead of turning them away.
+  // Event full (per-event capacity)? Queue the user instead of turning them away.
   const regCount = (await db.prepare(
     "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
   ).get(req.params.id)).c;
-  if (Number(regCount) >= EVENT_CAPACITY) {
+  const cap = Number(ev.capacity) || EVENT_CAPACITY;
+  if (Number(regCount) >= cap) {
     const queued = await db.prepare('SELECT id FROM waitlist WHERE event_id = ? AND user_id = ?')
       .get(req.params.id, req.session.userId);
     if (queued) return res.status(409).json({ error: 'Already on the waitlist' });
@@ -446,7 +594,9 @@ registrationsRouter.delete('/:id', async (req, res) => {
     await db.prepare("UPDATE registrations SET partner_user_id = NULL, updated_at = ? WHERE event_id = ? AND user_id = ? AND status = 'registered'")
       .run(now, reg.event_id, reg.partner_user_id);
   }
-  res.json({ ok: true });
+  // A freed spot immediately goes to the first person on the waitlist.
+  const promoted = await promoteNextWaitlist(reg.event_id);
+  res.json({ ok: true, promoted: promoted || null });
 });
 
 // PATCH /api/registrations/:id/training-slot (admin) — the organiser assigns
@@ -477,15 +627,18 @@ registrationsRouter.patch('/:id/training-slot', requireAdmin, async (req, res) =
 // used by the events page to show a global payment reminder on login.
 registrationsRouter.get('/my', async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
+  // include_finished=1 keeps history in the "My Events" list; the default
+  // (upcoming only) is what the payment reminder wants.
+  const includeFinished = String(req.query.include_finished || '') === '1';
   const regs = await db.prepare(`
     SELECT r.id, r.event_id, r.reg_type, r.training_slot, r.fee_cents, r.payment_status,
-           r.payment_submitted_at, e.title AS event_title, e.event_date, e.start_time,
+           r.payment_submitted_at, r.checked_in_at, e.title AS event_title, e.event_date, e.start_time,
            e.end_time, e.status AS event_status, e.payment_link
       FROM registrations r
       JOIN events e ON r.event_id = e.id
      WHERE r.user_id = ? AND r.status = 'registered'
-       AND e.status IN ('open', 'closed', 'active')
-     ORDER BY e.event_date ASC
+       ${includeFinished ? '' : "AND e.status IN ('open', 'closed', 'active')"}
+     ORDER BY e.event_date DESC
   `).all(req.session.userId);
   res.json({ registrations: regs });
 });
@@ -596,6 +749,17 @@ registrationsRouter.post('/waitlist/:id/promote', requireAdmin, async (req, res)
     await tx.prepare('DELETE FROM waitlist WHERE id = ?').run(entry.id);
     return r.lastInsertRowid;
   });
+
+  // Manual promotion deserves the same notification as the automatic one.
+  const when = `${ev.event_date} · ${ev.start_time}-${ev.end_time}`;
+  const place = ev.location ? ` · ${ev.location}` : '';
+  const title = `Waitlist promoted: ${ev.title}`;
+  const body = `An organiser has given you a confirmed spot.\nWhen: ${when}${place}\nFee: AUD$${(feeCents / 100).toFixed(2)} (please pay before the event)`;
+  createNotification({
+    userId: entry.user_id, type: 'waitlist_promoted', title, body, eventId: entry.event_id,
+    email: { subject: `[N1 Badminton] ${title}`, text: body },
+  }).catch(e => console.warn('Waitlist notification failed:', e.message));
+
   res.json({ id, training_slot: trainingSlot });
 });
 

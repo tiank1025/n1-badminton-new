@@ -419,6 +419,9 @@ function initRealtime(_io, sessionMiddleware, db) {
 
   io.on('connection', (socket) => {
     connectedCount++;
+    // Personal room so notifications.js can push to this player only.
+    const uid = socket.request.session && socket.request.session.userId;
+    if (uid) socket.join(`u:${uid}`);
     io.emit('connected_count', connectedCount);
     socket.emit('state_update', stateWithUndo());
 

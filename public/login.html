@@ -28,6 +28,7 @@
     .error { color:#dc2626; font-size:12px; font-weight:600; margin-top:8px; text-align:center; min-height:16px; }
     .back-link { display:block; text-align:center; margin-top:16px; font-size:13px; color:var(--mg-600); text-decoration:none; font-weight:600; }
   </style>
+  <script src="/i18n.js?v=3"></script>
 </head>
 <body>
   <div class="login-card">
@@ -65,6 +66,10 @@
       <div class="form-group">
         <label>Display Name (shown on board)</label>
         <input id="rg-name" type="text" placeholder="Your name on the court board">
+      </div>
+      <div class="form-group">
+        <label>Email (for waitlist notifications)</label>
+        <input id="rg-email" type="email" autocomplete="email" placeholder="you@example.com" required>
       </div>
       <div class="form-group">
         <label>Skill Level</label>
@@ -108,27 +113,27 @@
           body: JSON.stringify({ username: document.getElementById('li-user').value, password: document.getElementById('li-pass').value })
         });
         const d = await r.json();
-        if (!r.ok) { err.textContent = d.error || 'Login failed'; return; }
+        if (!r.ok) { err.textContent = d.error || t('Login failed', '登录失败'); return; }
         window.location.href = d.is_admin ? '/dashboard' : '/events.html';
-      } catch(e) { err.textContent = 'Network error: ' + e.message; }
+      } catch(e) { err.textContent = t('Network error: ', '网络错误：') + e.message; }
     }
 
     async function doRegister() {
       const err = document.getElementById('rg-err');
       err.textContent = '';
-      if (!document.getElementById('rg-user').value || !document.getElementById('rg-pass').value || !document.getElementById('rg-name').value) {
-        err.textContent = 'All fields required'; return;
+      if (!document.getElementById('rg-user').value || !document.getElementById('rg-pass').value || !document.getElementById('rg-name').value || !document.getElementById('rg-email').value) {
+        err.textContent = t('All fields required', '请填写所有字段'); return;
       }
       try {
         const r = await fetch('/api/auth/register', {
           method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ username: document.getElementById('rg-user').value, password: document.getElementById('rg-pass').value, display_name: document.getElementById('rg-name').value, level: selLvl })
+          body: JSON.stringify({ username: document.getElementById('rg-user').value, password: document.getElementById('rg-pass').value, display_name: document.getElementById('rg-name').value, email: document.getElementById('rg-email').value, level: selLvl })
         });
         const d = await r.json();
-        if (!r.ok) { err.textContent = d.error || 'Registration failed'; return; }
+        if (!r.ok) { err.textContent = d.error || t('Registration failed', '注册失败'); return; }
         // Account created + auto-logged-in: go straight to event browsing.
         window.location.href = '/events.html';
-      } catch(e) { err.textContent = 'Network error: ' + e.message; }
+      } catch(e) { err.textContent = t('Network error: ', '网络错误：') + e.message; }
     }
 
     document.querySelectorAll('input').forEach(i => {
@@ -139,7 +144,7 @@
       if (u) {
         const hint = document.createElement('div');
         hint.style.cssText = 'text-align:center;padding:0 24px 16px;font-size:13px;color:var(--mg-700);font-weight:600;';
-        hint.innerHTML = `Already logged in as ${u.display_name}. <a href="${u.is_admin ? '/dashboard' : '/events.html'}" style="color:var(--mg-600);">Go to ${u.is_admin ? 'dashboard' : 'events'} →</a>`;
+        hint.innerHTML = `${t('Already logged in as ', '当前已登录：')}${u.display_name}. <a href="${u.is_admin ? '/dashboard' : '/events.html'}" style="color:var(--mg-600);">${u.is_admin ? t('Go to dashboard', '前往管理后台') : t('Go to events', '查看活动')} →</a>`;
         document.querySelector('.login-card').appendChild(hint);
       }
     });

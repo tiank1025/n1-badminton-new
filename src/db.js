@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
   password_hash TEXT NOT NULL,
   password_salt TEXT NOT NULL,
   display_name  TEXT NOT NULL UNIQUE,
+  email         TEXT,
   level         TEXT NOT NULL DEFAULT 'novice'
                 CHECK (level IN ('advanced','intermediate','novice','beginner')),
   is_admin      INTEGER NOT NULL DEFAULT 0,
@@ -41,7 +42,9 @@ CREATE TABLE IF NOT EXISTS events (
   event_date           TEXT NOT NULL,
   start_time           TEXT NOT NULL DEFAULT '19:00',
   end_time             TEXT NOT NULL DEFAULT '21:00',
+  location             TEXT,
   training_enabled     INTEGER NOT NULL DEFAULT 1,
+  capacity             INTEGER NOT NULL DEFAULT 33,
   fee_social_cents     INTEGER NOT NULL DEFAULT 1900,
   fee_training_cents   INTEGER NOT NULL DEFAULT 4500,
   payment_link         TEXT,
@@ -74,6 +77,10 @@ CREATE TABLE IF NOT EXISTS registrations (
   payment_note    TEXT,
   payment_submitted_at {INT},
   payment_confirmed_at {INT},
+  -- On-site check-in: set when the player taps "I'm here" on the mobile page
+  -- (or an admin marks them present). Kept separate from the status column so
+  -- the registration still counts as active for capacity / board sync.
+  checked_in_at   {INT},
   created_at      {INT} NOT NULL,
   updated_at      {INT} NOT NULL
 );
@@ -93,6 +100,44 @@ CREATE TABLE IF NOT EXISTS waitlist (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_waitlist_event_user
   ON waitlist(event_id, user_id);
+
+CREATE TABLE IF NOT EXISTS matches (
+  id              {PK} PRIMARY KEY,
+  event_id        INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  match_date      TEXT NOT NULL,
+  match_time      TEXT,
+  team_a_p1_id    INTEGER NOT NULL REFERENCES users(id),
+  team_a_p2_id    INTEGER NOT NULL REFERENCES users(id),
+  team_b_p1_id    INTEGER NOT NULL REFERENCES users(id),
+  team_b_p2_id    INTEGER NOT NULL REFERENCES users(id),
+  score_a         INTEGER,
+  score_b         INTEGER,
+  winner          TEXT CHECK (winner IN ('A', 'B', NULL)),
+  status          TEXT NOT NULL DEFAULT 'recorded'
+                  CHECK (status IN ('recorded', 'cancelled')),
+  notes           TEXT,
+  recorded_by     INTEGER NOT NULL REFERENCES users(id),
+  recorded_at     {INT} NOT NULL,
+  updated_by      INTEGER REFERENCES users(id),
+  updated_at      {INT},
+  created_at      {INT} NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_matches_event ON matches(event_id);
+CREATE INDEX IF NOT EXISTS idx_matches_date ON matches(match_date);
+
+-- In-app notifications. Created when a waitlisted player is promoted into a
+-- freed spot (and potentially for other admin actions later).
+CREATE TABLE IF NOT EXISTS notifications (
+  id         {PK} PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       TEXT NOT NULL,
+  title      TEXT NOT NULL,
+  body       TEXT,
+  event_id   INTEGER REFERENCES events(id) ON DELETE CASCADE,
+  read_at    {INT},
+  created_at {INT} NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read_at);
 `;
 
 // ── Build the backend ───────────────────────────────────
@@ -212,12 +257,16 @@ const COLUMN_MIGRATIONS = [
   ['events', 'fee_social_cents', 'INTEGER NOT NULL DEFAULT 1900'],
   ['events', 'fee_training_cents', 'INTEGER NOT NULL DEFAULT 4500'],
   ['events', 'payment_link', 'TEXT'],
+  ['events', 'capacity', 'INTEGER NOT NULL DEFAULT 33'],
   ['registrations', 'fee_cents', 'INTEGER'],
   ['registrations', 'payment_status', "TEXT NOT NULL DEFAULT 'unpaid'"],
   ['registrations', 'payment_proof', 'TEXT'],
   ['registrations', 'payment_note', 'TEXT'],
   ['registrations', 'payment_submitted_at', '{INT}'],
   ['registrations', 'payment_confirmed_at', '{INT}'],
+  ['registrations', 'checked_in_at', '{INT}'],
+  ['events', 'location', 'TEXT'],
+  ['users', 'email', 'TEXT'],
 ];
 
 async function hasColumn(table, column) {
@@ -249,6 +298,44 @@ async function migrate() {
       FROM events AS e
      WHERE r.event_id = e.id AND r.fee_cents IS NULL
   `);
+
+  await translateLegacyNotifications();
+}
+
+// Notifications written before the site standardised on English are stored in
+// Chinese. Rewrite them once so the in-app list is consistent in both modes.
+async function translateLegacyNotifications() {
+  const rows = await db.prepare(
+    "SELECT id, type, title, body, event_id FROM notifications WHERE type = 'waitlist_promoted'"
+  ).all();
+  const CJK = /[\u4e00-\u9fff]/;
+  for (const row of rows) {
+    if (!CJK.test(`${row.title || ''}${row.body || ''}`)) continue;
+
+    // Recover the event title from the Chinese prefix when possible.
+    const m = /^候补转正确认：(.+)$/.exec(row.title || '');
+    let eventTitle = m ? m[1] : null;
+    if (!eventTitle && row.event_id) {
+      const ev = await db.prepare('SELECT title FROM events WHERE id = ?').get(row.event_id);
+      eventTitle = ev?.title || null;
+    }
+
+    const title = `Waitlist promoted: ${eventTitle || 'N1 Badminton event'}`;
+    const ev = row.event_id
+      ? await db.prepare('SELECT event_date, start_time, end_time, location FROM events WHERE id = ?').get(row.event_id)
+      : null;
+
+    const when = ev
+      ? `${ev.event_date} · ${ev.start_time}-${ev.end_time}${ev.location ? ` · ${ev.location}` : ''}`
+      : '';
+    const body = [
+      'You have been moved from the waitlist to a confirmed spot.',
+      when ? `When: ${when}` : '',
+      'If you can no longer attend, please cancel at least 24 hours before the event starts.',
+    ].filter(Boolean).join('\n');
+
+    await db.prepare('UPDATE notifications SET title = ?, body = ? WHERE id = ?').run(title, body, row.id);
+  }
 }
 
 // ── Password hashing (node:crypto scrypt) ───────────────
