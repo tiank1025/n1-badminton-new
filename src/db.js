@@ -271,8 +271,11 @@ const COLUMN_MIGRATIONS = [
 
 async function hasColumn(table, column) {
   if (isPG) {
+    // NOTE: restrict to the current schema — Supabase ships its own
+    // auth.users table (with an email column), and an unqualified
+    // information_schema query would match it and wrongly skip migrations.
     const row = await db.prepare(
-      'SELECT 1 AS x FROM information_schema.columns WHERE table_name = ? AND column_name = ?'
+      'SELECT 1 AS x FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ? AND column_name = ?'
     ).get(table, column);
     return !!row;
   }
