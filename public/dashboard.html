@@ -193,6 +193,7 @@
     <div>
       <a href="/board">📊 Live Board</a>
       <a href="/matches">🏸 Matches</a>
+      <a href="#" onclick="openUsers(); return false;">👥 Users</a>
       <a href="/profile">👤 Profile</a>
       <a href="/">ℹ️ Info</a>
       <a href="#" id="logout">Logout</a>
@@ -323,6 +324,24 @@
         </div>
         <div id="detail-matches"></div>
       </section>
+    </div>
+
+    <!-- ── Users view: every registered account ── -->
+    <div id="users-view" class="hidden">
+      <button class="btn btn-secondary mb-12" onclick="closeUsers()">← All Events</button>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+          <div>
+            <h2 style="margin-bottom:2px;">Registered Users</h2>
+            <div class="text-muted" id="users-summary" style="font-size:12px;"></div>
+          </div>
+        </div>
+        <div class="search-field">
+          <span class="search-icon">🔍</span>
+          <input id="users-search" type="search" placeholder="Search name, username or email…" oninput="renderUsers(this.value)">
+        </div>
+      </div>
+      <div id="users-list"></div>
     </div>
 
     <!-- ── Match entry modal ── -->
@@ -535,6 +554,82 @@
       document.getElementById('toggle-create').textContent = '＋ New Event';
       document.getElementById('create-card').classList.add('hidden');
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    // ── Users view ─────────────────────────────────────────
+    let allUsers = [];
+
+    function escHtml(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+
+    function fmtDate(ms) {
+      if (!ms) return '';
+      const d = new Date(Number(ms));
+      return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+    }
+
+    async function openUsers() {
+      document.getElementById('list-view').classList.add('hidden');
+      document.getElementById('detail-view').classList.add('hidden');
+      document.getElementById('users-view').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      await loadUsers();
+    }
+
+    function closeUsers() {
+      document.getElementById('users-view').classList.add('hidden');
+      document.getElementById('list-view').classList.remove('hidden');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function loadUsers() {
+      const r = await fetch('/api/auth/users');
+      if (!r.ok) { toast(t('Could not load users.', '加载用户失败。'), false); return; }
+      allUsers = await r.json();
+      renderUsers(document.getElementById('users-search')?.value || '');
+    }
+
+    function renderUsers(q) {
+      const list = document.getElementById('users-list');
+      const term = String(q || '').trim().toLowerCase();
+      const items = allUsers.filter(u =>
+        !term || [u.display_name, u.username, u.email]
+          .some(v => (v || '').toLowerCase().includes(term))
+      );
+      document.getElementById('users-summary').textContent = term
+        ? `${items.length} / ${allUsers.length} ${t('account(s) match', '个账号匹配')}`
+        : `${allUsers.length} ${t('registered account(s)', '个注册账号')}`;
+
+      if (!items.length) {
+        list.innerHTML = `<div class="card"><div class="empty-state">${t('No users found.', '没有找到用户。')}</div></div>`;
+        return;
+      }
+
+      const LEVEL_LABEL = {
+        advanced: t('Advanced', '高级'),
+        intermediate: t('Intermediate', '中级'),
+        novice: t('Novice', '初级'),
+        beginner: t('Beginner', '入门'),
+      };
+
+      list.innerHTML = `<div class="card">${items.map((u, i) => `
+        <div style="display:flex; align-items:center; gap:12px; padding:11px 4px;${i ? 'border-top:1px solid var(--border);' : ''}">
+          <div style="flex:1; min-width:0;">
+            <div style="font-weight:800; font-size:14px;">
+              ${escHtml(u.display_name)}${u.is_admin ? ` <span class="pay-badge pay-paid" style="margin-left:4px;">Admin</span>` : ''}
+            </div>
+            <div class="text-muted" style="font-size:12px; overflow-wrap:anywhere;">
+              @${escHtml(u.username)} · ${u.email ? escHtml(u.email) : t('no email', '未填邮箱')}
+            </div>
+          </div>
+          <div style="text-align:right; font-size:12px; color:var(--text-muted); white-space:nowrap;">
+            <div>${LEVEL_LABEL[u.level] || escHtml(u.level)}</div>
+            <div>${u.active_events} ${t('active', '在报')} · ${u.total_signups} ${t('total', '累计')}</div>
+            <div>${fmtDate(u.created_at)}</div>
+          </div>
+        </div>`).join('')}</div>`;
     }
 
     function renderDetailHeader(ev) {

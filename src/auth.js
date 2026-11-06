@@ -74,6 +74,20 @@ router.get('/me', async (req, res) => {
   res.json(user || null);
 });
 
+// GET /api/auth/users (admin) — every registered account, newest first.
+router.get('/users', requireAdmin, async (req, res) => {
+  const rows = await db.prepare(
+    `SELECT u.id, u.username, u.display_name, u.email, u.level, u.is_admin, u.created_at,
+            (SELECT COUNT(*) FROM registrations r
+              WHERE r.user_id = u.id AND r.status = 'registered') AS active_events,
+            (SELECT COUNT(*) FROM registrations r2
+              WHERE r2.user_id = u.id) AS total_signups
+     FROM users u
+     ORDER BY u.created_at DESC`
+  ).all();
+  res.json(rows);
+});
+
 // PATCH /api/auth/email — players opt in to email notifications themselves
 // (used when a waitlist spot opens). Empty string clears the address.
 router.patch('/email', requireLogin, async (req, res) => {
