@@ -953,7 +953,13 @@
         const r = await fetch(`/api/registrations/${regId}`, { method:'DELETE', credentials:'same-origin' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
-        toast('✅ Participant removed');
+        if (d.promoted) {
+          toast(d.promoted.emailSent
+            ? '✅ Participant removed; waitlisted player promoted and email accepted by SMTP'
+            : '✅ Participant removed and waitlisted player promoted, but their email was not sent', !d.promoted.emailSent);
+        } else {
+          toast('✅ Participant removed');
+        }
         loadEvents();
       } catch (e) { toast('❌ Network error: ' + e.message, false); }
     }

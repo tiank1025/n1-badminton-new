@@ -102,16 +102,23 @@ async function promoteNextWaitlist(eventId) {
   const title = `Waitlist promoted: ${ev.title}`;
   const body = `You have been automatically moved from the waitlist to a confirmed spot.\nWhen: ${when}${place}\nFee: AUD$${(fee / 100).toFixed(2)} (please pay before the event)\nIf you can no longer attend, please cancel at least 24 hours before the event starts.`;
 
-  createNotification({
+  const notification = await createNotification({
     userId: entry.user_id,
     type: 'waitlist_promoted',
     title,
     body,
     eventId,
     email: { subject: `[N1 Badminton] ${title}`, text: body },
-  }).catch(e => console.warn('Waitlist notification failed:', e.message));
+  });
+  if (!notification.emailSent) {
+    console.warn(`Waitlist promotion email was not sent for user ${entry.user_id}`);
+  }
 
-  return { userId: entry.user_id, registrationId: inserted.lastInsertRowid };
+  return {
+    userId: entry.user_id,
+    registrationId: inserted.lastInsertRowid,
+    emailSent: notification.emailSent === true,
+  };
 }
 
 // GET /api/events?status=open
@@ -596,6 +603,29 @@ registrationsRouter.delete('/:id', async (req, res) => {
   if (reg.partner_user_id) {
     await db.prepare("UPDATE registrations SET partner_user_id = NULL, updated_at = ? WHERE event_id = ? AND user_id = ? AND status = 'registered'")
       .run(now, reg.event_id, reg.partner_user_id);
+  }
+  // An organiser removing a participant is a distinct action from a player
+  // cancelling their own spot, so notify the affected player in-app and by email.
+  if (isAdmin) {
+    const ev = await db.prepare(
+      'SELECT title, event_date, start_time, end_time, location FROM events WHERE id = ?'
+    ).get(reg.event_id);
+    const when = ev ? `${ev.event_date} · ${ev.start_time}-${ev.end_time}` : '';
+    const place = ev?.location ? ` · ${ev.location}` : '';
+    const title = `Registration removed: ${ev?.title || 'N1 Badminton event'}`;
+    const body = [
+      'An organiser has removed your registration from this event.',
+      when ? `When: ${when}${place}` : '',
+      'Please contact the organiser if you think this was a mistake.',
+    ].filter(Boolean).join('\n');
+    await createNotification({
+      userId: reg.user_id,
+      type: 'registration_removed',
+      title,
+      body,
+      eventId: reg.event_id,
+      email: { subject: `[N1 Badminton] ${title}`, text: body },
+    });
   }
   // A freed spot immediately goes to the first person on the waitlist.
   const promoted = await promoteNextWaitlist(reg.event_id);
