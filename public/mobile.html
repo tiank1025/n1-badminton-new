@@ -119,7 +119,11 @@ function fmtDate(d) {
 }
 
 function timeStr(ts) {
-  return new Date(ts).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
+  if (ts == null || ts === '') return '';
+  const value = typeof ts === 'string' && /^\d+$/.test(ts) ? Number(ts) : ts;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
 }
 
 async function boot() {
@@ -199,7 +203,8 @@ async function refresh() {
 function statusBlock() {
   const checked = myReg && myReg.checked_in_at;
   if (checked) {
-    return `<div class="m-status st-ok">✅ 已签到 · Checked in ${timeStr(myReg.checked_in_at)}</div>`;
+    const checkedInTime = timeStr(myReg.checked_in_at);
+    return `<div class="m-status st-ok">✅ Checked in${checkedInTime ? ` at ${checkedInTime}` : ''}</div>`;
   }
   if (myReg) {
     return `<div class="m-status st-ok">✅ ${t('Registered', '报名成功')}</div>`;
@@ -213,7 +218,7 @@ function statusBlock() {
 function actionsBlock() {
   const isOpen = eventData.status === 'open';
   if (myReg && myReg.checked_in_at) {
-    return `<div class="m-status st-none">📊 场地队列请从管理后台 Live Board 查看 / View courts from the admin dashboard.</div>`;
+    return `<div class="m-status st-none">📊 View the court queue on the Live Board from the admin dashboard.</div>`;
   }
   if (myReg) {
     return `<button class="m-btn m-btn-primary" onclick="checkIn()">🙋 我已到场 · Check in</button>
