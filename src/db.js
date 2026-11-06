@@ -171,7 +171,8 @@ if (isPG) {
     return function prepare(sql) {
       let finalSql = toPgParams(sql);
       // Auto-append RETURNING id for INSERTs so .run() can expose lastInsertRowid.
-      if (/^\s*INSERT\s+/i.test(sql) && !/RETURNING/i.test(sql)) {
+      if (/^\s*INSERT\s+/i.test(sql) && !/RETURNING/i.test(sql)
+          && !/^\s*INSERT\s+INTO\s+app_sessions\b/i.test(sql)) {
         finalSql = finalSql + ' RETURNING id';
       }
       return {
