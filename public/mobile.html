@@ -213,7 +213,7 @@ function statusBlock() {
 function actionsBlock() {
   const isOpen = eventData.status === 'open';
   if (myReg && myReg.checked_in_at) {
-    return `<a class="m-btn m-btn-ghost" href="/board?eventId=${eventId}">📊 查看场地队列 / Courts</a>`;
+    return `<div class="m-status st-none">📊 场地队列请从管理后台 Live Board 查看 / View courts from the admin dashboard.</div>`;
   }
   if (myReg) {
     return `<button class="m-btn m-btn-primary" onclick="checkIn()">🙋 我已到场 · Check in</button>
@@ -392,7 +392,7 @@ function paintLive() {
 
   el.innerHTML = mineHtml +
     (courts.length ? courts.join('') : `<div class="queue-line">${t('No courts are in play right now', '目前没有正在进行的场地')}</div>`) +
-    `<a class="m-btn m-btn-ghost" href="/board?eventId=${eventId}">${t('Open full board', '打开完整对战板')} / Board</a>`;
+    '';
 }
 
 // ── Notifications ───────────────────────────────────────

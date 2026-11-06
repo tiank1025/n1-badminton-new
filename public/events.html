@@ -148,7 +148,6 @@
     </div>
     <nav>
       <a href="/events">📅 Events</a>
-      <a href="/board" id="board-link">📊 Live Board</a>
       <a href="/matches">🏸 Matches</a>
       <a href="/profile">👤 Profile</a>
       <a href="/">ℹ️ Info</a>
@@ -281,7 +280,6 @@
       currentUser = await r.json();
       if (!currentUser) { window.location.href = '/login'; return; }
       document.getElementById('user-info').textContent = `${t('Hi, ', '你好，')}${currentUser.display_name} (${currentUser.level})`;
-      document.getElementById('board-link').classList.remove('hidden');
       if (currentUser.is_admin) document.getElementById('dashboard-link').style.display = '';
     }
 
@@ -380,9 +378,6 @@
       const feeCents = reg.fee_cents ?? feeFor(ev, reg.reg_type);
 
       let rightBtns = '';
-      if (canOpenBoard) {
-        rightBtns += `<a class="btn btn-primary btn-sm" href="/board?eventId=${ev.id}">📊 Board</a> `;
-      }
       // 已结束的活动不再提示付款，只保留查看入口
       if (!isFinished && status !== 'paid' && status !== 'waived') {
         rightBtns += `<button class="btn btn-secondary btn-sm" onclick="openEvent(${ev.id})">💳 Pay</button> `;
@@ -420,9 +415,7 @@
       const badge = isActive
         ? '<span class="badge badge-active">🔴 Live</span>'
         : '<span class="badge badge-open">Open</span>';
-      const primaryBtn = isActive
-        ? `<a class="btn btn-primary btn-block" href="/board?eventId=${ev.id}">📊 ${t('Enter Live Board', '进入实时球板')}</a>`
-        : `<button class="btn btn-primary btn-block" onclick="openEvent(${ev.id})">${full ? t('Full — Join Waitlist', '已满员 — 加入候补') : t('Register Now', '立即报名')}</button>`;
+      const primaryBtn = `<button class="btn btn-primary btn-block" onclick="openEvent(${ev.id})">${full ? t('Full — Join Waitlist', '已满员 — 加入候补') : t('Register Now', '立即报名')}</button>`;
 
       // 管理员能拿到 reg_count / capacity / waitlist_count，继续显示具体数字；
       // 普通用户只能看到 is_full / has_waitlist，渲染成纯状态文字。
