@@ -358,6 +358,9 @@
       <div id="my-status"></div>
       <div class="hd-btn-row">
         <a href="/events.html" class="admin-btn" id="events-link">📅 Events</a>
+        <a href="/matches" class="admin-btn">🏸 Matches</a>
+        <a href="/profile" class="admin-btn">👤 Profile</a>
+        <a href="/" class="admin-btn">ℹ️ Info</a>
         <a href="/dashboard" class="admin-btn" id="dashboard-link" style="display:none">📊 Dashboard</a>
         <button class="admin-btn" onclick="showQrModal()">📷 QR</button>
         <button class="admin-btn" id="stats-btn" onclick="showStatsModal()" style="display:none">📊 Stats</button>
@@ -668,7 +671,7 @@ async function initAuth() {
     const infoEl = document.getElementById('user-info');
     if (infoEl) infoEl.textContent = `Hi, ${myName} (${myLevel})`;
     document.getElementById('dashboard-link').style.display = isAdmin ? '' : 'none';
-    document.getElementById('events-link').style.display = isAdmin ? 'none' : '';
+    document.getElementById('events-link').style.display = '';
     render();
 
     // ── Per-event deep-link: /board?eventId=X[&activate=1] ──
@@ -732,7 +735,7 @@ function renderAdminControls() {
   document.getElementById('admin-pair-btn').style.display = isAdmin ? '' : 'none';
   document.getElementById('join-sticky').style.display = isAdmin ? 'none' : '';
   document.getElementById('dashboard-link').style.display = isAdmin ? '' : 'none';
-  document.getElementById('events-link').style.display = isAdmin ? 'none' : '';
+  document.getElementById('events-link').style.display = '';
   renderAnnounceBtn();
   document.querySelector('main').classList.toggle('admin-mode', isAdmin);
   document.querySelector('.page-wrap').classList.toggle('admin-layout', isAdmin);

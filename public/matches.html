@@ -109,9 +109,11 @@
     <div>
       <a href="/events">📅 Events</a>
       <a href="/board">📊 Live Board</a>
+      <a href="/matches">🏸 Matches</a>
       <a href="/profile">👤 Profile</a>
       <a href="/">ℹ️ Info</a>
-      <a href="#" id="logout">Logout</a>
+      <a href="/dashboard" id="dashboard-link" style="display:none">📊 Dashboard</a>
+      <a href="#" id="logout">🚪 Logout</a>
     </div>
   </div>
 
@@ -136,6 +138,7 @@
       const r = await fetch('/api/auth/me');
       const u = await r.json();
       if (!u) { window.location.href = '/login'; return; }
+      if (u.is_admin) document.getElementById('dashboard-link').style.display = '';
       document.getElementById('user-info').textContent = `${t('Hi ', '你好，')}${u.display_name}`;
     }
 

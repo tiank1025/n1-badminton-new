@@ -147,11 +147,13 @@
       <div class="user-info" id="user-info"></div>
     </div>
     <nav>
-      <a href="/">ℹ️ Info · 详情</a>
+      <a href="/events">📅 Events</a>
       <a href="/board" id="board-link">📊 Live Board</a>
       <a href="/matches">🏸 Matches</a>
       <a href="/profile">👤 Profile</a>
-      <a href="#" id="logout">Logout</a>
+      <a href="/">ℹ️ Info</a>
+      <a href="/dashboard" id="dashboard-link" style="display:none">📊 Dashboard</a>
+      <a href="#" id="logout">🚪 Logout</a>
     </nav>
   </header>
 
@@ -280,6 +282,7 @@
       if (!currentUser) { window.location.href = '/login'; return; }
       document.getElementById('user-info').textContent = `${t('Hi, ', '你好，')}${currentUser.display_name} (${currentUser.level})`;
       document.getElementById('board-link').classList.remove('hidden');
+      if (currentUser.is_admin) document.getElementById('dashboard-link').style.display = '';
     }
 
     async function loadEvents() {

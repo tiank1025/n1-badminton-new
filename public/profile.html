@@ -20,7 +20,7 @@
 <body>
   <header class="app-header">
     <div><h1>🏸 My Profile</h1><div class="user-info" id="profile-user"></div></div>
-    <nav><a href="/events">Events</a><a href="/matches">Matches</a><a href="/">Info</a><a href="#" id="logout">Logout</a></nav>
+    <nav><a href="/events">📅 Events</a><a href="/board">📊 Live Board</a><a href="/matches">🏸 Matches</a><a href="/profile">👤 Profile</a><a href="/">ℹ️ Info</a><a href="/dashboard" id="dashboard-link" style="display:none">📊 Dashboard</a><a href="#" id="logout">🚪 Logout</a></nav>
   </header>
   <main>
     <section class="card profile-form">
@@ -42,6 +42,7 @@
       const r = await fetch('/api/auth/me');
       const user = await r.json();
       if (!user) { location.href = '/login'; return; }
+      if (user.is_admin) $('dashboard-link').style.display = '';
       $('profile-user').textContent = user.display_name;
       $('username').value = user.username || '';
       $('display-name').value = user.display_name || '';
