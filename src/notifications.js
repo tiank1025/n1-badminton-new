@@ -25,7 +25,11 @@ let transporter = null;
 async function getTransporter() {
   if (transporter !== null) return transporter;
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) { transporter = false; return false; }
+  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
+    console.warn('Email notification skipped: SMTP_HOST, SMTP_USER and SMTP_PASS must all be configured');
+    transporter = false;
+    return false;
+  }
   let host = SMTP_HOST;
   try {
     const { address } = await require('node:dns').promises.lookup(SMTP_HOST, { family: 4 });
@@ -38,23 +42,30 @@ async function getTransporter() {
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
     tls: { servername: SMTP_HOST },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
   return transporter;
 }
 
 const MAIL_FROM = process.env.SMTP_FROM || 'N1 Badminton <no-reply@n1badminton.org>';
 
-// Fire-and-forget: a failed email must never break the request that triggered it.
+// A failed email must never undo the in-app notification or its triggering action.
 async function sendEmail(userId, subject, text) {
-  const t = await getTransporter();
-  if (!t) return false;
   try {
+    const t = await getTransporter();
+    if (!t) return false;
     const user = await db.prepare('SELECT email, display_name FROM users WHERE id = ?').get(userId);
-    if (!user?.email) return false;
-    await t.sendMail({ from: MAIL_FROM, to: user.email, subject, text });
+    if (!user?.email) {
+      console.warn(`Email notification skipped: user ${userId} has no email address`);
+      return false;
+    }
+    const info = await t.sendMail({ from: MAIL_FROM, to: user.email, subject, text });
+    console.info(`Email notification accepted by SMTP for user ${userId} (message ${info.messageId})`);
     return true;
   } catch (e) {
-    console.warn('邮件发送失败:', e.message);
+    console.warn(`Email notification failed for user ${userId}:`, e.code || '', e.message);
     return false;
   }
 }
@@ -71,13 +82,23 @@ async function createNotification({ userId, type, title, body, eventId = null, e
   ).run(userId, type, title, body || null, eventId, now);
 
   const payload = { id: r.lastInsertRowid, type, title, body, event_id: eventId, created_at: now };
-  if (io) io.to(`u:${userId}`).emit('notification', payload);
-
+  const deliveries = [];
+  if (io) {
+    deliveries.push(Promise.resolve().then(() => {
+      io.to(`u:${userId}`).emit('notification', payload);
+      return true;
+    }).catch(e => {
+      console.warn(`In-app notification push failed for user ${userId}:`, e.message);
+      return false;
+    }));
+  }
   if (email) {
     const subject = email.subject || title;
     const text = email.text || `${title}\n\n${body || ''}`;
-    sendEmail(userId, subject, text).catch(() => {});
+    deliveries.push(sendEmail(userId, subject, text));
   }
+  const results = await Promise.all(deliveries);
+  if (email) payload.emailSent = results[deliveries.length - 1] === true;
   return payload;
 }
 

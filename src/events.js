@@ -418,8 +418,8 @@ router.get('/:id/registrations', async (req, res) => {
     let waitlistPosition = null;
     if (entry) {
       const ahead = (await db.prepare(
-        'SELECT COUNT(*) AS c FROM waitlist WHERE event_id = ? AND created_at < ?'
-      ).get(req.params.id, entry.created_at)).c;
+        'SELECT COUNT(*) AS c FROM waitlist WHERE event_id = ? AND (created_at < ? OR (created_at = ? AND id < ?))'
+      ).get(req.params.id, entry.created_at, entry.created_at, entry.id)).c;
       waitlistPosition = Number(ahead) + 1;
     }
     // Regular users only get boolean seat-availability flags, never the exact numbers.
@@ -502,6 +502,9 @@ router.post('/:id/registrations', async (req, res) => {
   const { reg_type, partner_user_id, sticky_pair } = req.body || {};
   if (!['activity', 'training_and_activity'].includes(reg_type)) {
     return res.status(400).json({ error: 'Invalid registration type' });
+  }
+  if (reg_type === 'training_and_activity' && !ev.training_enabled) {
+    return res.status(400).json({ error: 'Training is not available for this event' });
   }
 
   // Check existing registration
@@ -755,12 +758,12 @@ registrationsRouter.post('/waitlist/:id/promote', requireAdmin, async (req, res)
   const place = ev.location ? ` · ${ev.location}` : '';
   const title = `Waitlist promoted: ${ev.title}`;
   const body = `An organiser has given you a confirmed spot.\nWhen: ${when}${place}\nFee: AUD$${(feeCents / 100).toFixed(2)} (please pay before the event)`;
-  createNotification({
+  const notification = await createNotification({
     userId: entry.user_id, type: 'waitlist_promoted', title, body, eventId: entry.event_id,
     email: { subject: `[N1 Badminton] ${title}`, text: body },
-  }).catch(e => console.warn('Waitlist notification failed:', e.message));
+  });
 
-  res.json({ id, training_slot: trainingSlot });
+  res.json({ id, training_slot: trainingSlot, email_sent: notification.emailSent === true });
 });
 
 // DELETE /api/registrations/waitlist/:id — leave the waitlist (owner or admin).

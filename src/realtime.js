@@ -405,13 +405,16 @@ function initRealtime(_io, sessionMiddleware, db) {
       const userId = socket.request.session && socket.request.session.userId;
       if (userId) {
         try {
-          const row = await db.prepare('SELECT is_admin FROM users WHERE id = ?').get(userId);
+          const row = await db.prepare('SELECT is_admin, display_name FROM users WHERE id = ?').get(userId);
           socket.isAdmin = !!(row && row.is_admin);
+          socket.playerName = row?.display_name || null;
         } catch (e) {
           socket.isAdmin = false;
+          socket.playerName = null;
         }
       } else {
         socket.isAdmin = false;
+        socket.playerName = null;
       }
       next();
     });
@@ -430,6 +433,7 @@ function initRealtime(_io, sessionMiddleware, db) {
       io.emit('connected_count', connectedCount);
     });
 
+    socket.queueNames = new Set();
     socket.on('join_queue', ({ name, level, partner, sticky }) => {
       name = sanitize(name);
       partner = sanitize(partner || '');
@@ -438,6 +442,7 @@ function initRealtime(_io, sessionMiddleware, db) {
       if (!LEVELS.includes(level)) return;
       state.players[name] = level;
       state.queue.push(name);
+      socket.queueNames.add(name);
       // Partner must already be waiting. `sticky` = keep the pair together for the
       // whole session; otherwise it auto-dissolves after their first game together.
       // First-pair priority: a partner who is already in an earlier pair cannot be
@@ -456,7 +461,9 @@ function initRealtime(_io, sessionMiddleware, db) {
 
     socket.on('remove_from_queue', (name) => {
       name = sanitize(name);
+      if (!socket.isAdmin && socket.playerName !== name && !socket.queueNames.has(name)) return;
       state.queue = state.queue.filter(n => n !== name);
+      socket.queueNames.delete(name);
       cleanupPair(name); // also clears the sticky flag
       broadcast();
     });

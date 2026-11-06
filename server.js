@@ -6,6 +6,7 @@ const express = require('express');
 const http = require('http');
 const path = require('path');
 const session = require('express-session');
+const { DatabaseSessionStore } = require('./src/session-store');
 const cookieParser = require('cookie-parser');
 const { Server } = require('socket.io');
 const { db, dbReady } = require('./src/db');
@@ -16,6 +17,9 @@ const { initRealtime } = require('./src/realtime');
 const { router: notificationsRouter, setIo } = require('./src/notifications');
 
 const app = express();
+if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
+  throw new Error('SESSION_SECRET must be set in production');
+}
 // Render terminates HTTPS at its proxy and forwards the request to Node over
 // HTTP. Trust the proxy so express-session can issue secure cookies correctly.
 app.set('trust proxy', 1);
@@ -26,6 +30,7 @@ const PORT = process.env.PORT || 3000;
 const sessionMiddleware = session({
   name: 'n1.sid',
   secret: process.env.SESSION_SECRET || 'dev-secret-change-in-production',
+  store: new DatabaseSessionStore(db),
   resave: false,
   saveUninitialized: false,
   cookie: {
@@ -37,7 +42,9 @@ const sessionMiddleware = session({
 });
 
 // ── Middleware ──────────────────────────────────────────
-app.use(express.json({ limit: '8mb' })); // payment-proof screenshots arrive as data URLs
+// A 6 MiB image expands to just over 8 MiB when base64-encoded, plus the JSON
+// envelope. Leave enough room here for the route's explicit 6 MiB image cap.
+app.use(express.json({ limit: '9mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(sessionMiddleware);

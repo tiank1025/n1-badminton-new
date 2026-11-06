@@ -908,7 +908,9 @@
         const r = await fetch(`/api/registrations/waitlist/${wlId}/promote`, { method:'POST', credentials:'same-origin' });
         const d = await r.json().catch(() => ({}));
         if (!r.ok) { toast('❌ ' + (d.error || `Failed (${r.status})`), false); return; }
-        toast('✅ Promoted from waitlist');
+        toast(d.email_sent
+          ? '✅ Promoted; email accepted by SMTP'
+          : '✅ Promoted, but email was not sent — check the player email and server logs', !d.email_sent);
         loadEvents();
       } catch (e) { toast('❌ Network error: ' + e.message, false); }
     }

@@ -138,6 +138,15 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at {INT} NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_notif_user ON notifications(user_id, read_at);
+
+-- Persistent express-session storage; survives process restarts and works
+-- when requests are served by more than one app instance.
+CREATE TABLE IF NOT EXISTS app_sessions (
+  sid    TEXT PRIMARY KEY,
+  sess   TEXT NOT NULL,
+  expire {INT} NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_app_sessions_expire ON app_sessions(expire);
 `;
 
 // ── Build the backend ───────────────────────────────────
@@ -258,6 +267,7 @@ const COLUMN_MIGRATIONS = [
   ['events', 'fee_training_cents', 'INTEGER NOT NULL DEFAULT 4500'],
   ['events', 'payment_link', 'TEXT'],
   ['events', 'capacity', 'INTEGER NOT NULL DEFAULT 33'],
+  ['events', 'training_enabled', 'INTEGER NOT NULL DEFAULT 1'],
   ['registrations', 'fee_cents', 'INTEGER'],
   ['registrations', 'payment_status', "TEXT NOT NULL DEFAULT 'unpaid'"],
   ['registrations', 'payment_proof', 'TEXT'],

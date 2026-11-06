@@ -34,5 +34,17 @@ services:
         sync: false
       - key: BOOTSTRAP_ADMIN_USERNAME
         value: admin
+      # Optional email alerts (currently sent when a waitlisted player is promoted).
+      # Set these in the Render dashboard to enable SMTP delivery.
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: SMTP_FROM
+        sync: false
       - key: STATE_FILE
         value: /tmp/state.json
