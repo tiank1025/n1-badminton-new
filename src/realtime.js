@@ -145,11 +145,25 @@ function syncQueueTimers() {
   Object.keys(queuedSince).forEach(n => { if (!inQueue.has(n)) delete queuedSince[n]; });
 }
 
+// Broadcast the full board state, coalescing bursts: admin actions and drag
+// events often fire several socket handlers in quick succession (e.g. a
+// drag-and-drop sequence), and each one previously sent the entire state to
+// every connected client. A 50 ms coalescing window keeps updates visually
+// instant while collapsing bursts into a single send. Time-sensitive side
+// channels (announce, join_success, assign_error) still emit immediately.
+const BROADCAST_COALESCE_MS = 50;
+let broadcastPending = false;
+
 function broadcast() {
   syncCourtTimers();
   syncQueueTimers();
-  io.emit('state_update', stateWithUndo());
   scheduleSave();
+  if (broadcastPending) return;
+  broadcastPending = true;
+  setTimeout(() => {
+    broadcastPending = false;
+    io.emit('state_update', stateWithUndo());
+  }, BROADCAST_COALESCE_MS);
 }
 
 // ── Training slot timer helpers ─────────────────────────

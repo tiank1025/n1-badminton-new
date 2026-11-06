@@ -1,4 +1,4 @@
-const { db } = require('./db');
+const { db, isPG } = require('./db');
 const express = require('express');
 const router = express.Router();
 // Registrations live at /api/registrations, so they need a router mounted at
@@ -7,6 +7,7 @@ const router = express.Router();
 const registrationsRouter = express.Router();
 const { requireAdmin } = require('./auth');
 const { createNotification } = require('./notifications');
+const { uploadProof, fetchProofAsDataUrl, isStorageRef } = require('./proof-storage');
 
 const SLOT_LABELS = ['7:00 – 7:30', '7:30 – 8:00', '8:00 – 8:30', '8:30 – 9:00'];
 const MAX_PER_SLOT = 4;
@@ -73,30 +74,57 @@ function parseCents(value, fallback) {
 // When a spot frees up, the earliest waitlisted player is moved into a real
 // registration (fee snapshot taken from the event) and notified in-app + email.
 // Returns null when there is nobody waiting or the event is somehow still full.
+//
+// The capacity re-check + insert run inside a transaction that locks the event
+// row (Postgres FOR UPDATE; SQLite serialises via the transaction mutex), so
+// two concurrent cancellations can never both promote the same entry — or
+// promote two entries for a single freed spot.
+//
+// On Postgres, locking a row selected via FOR UPDATE then re-selecting in the
+// same transaction is safe. The email/network notification happens AFTER the
+// transaction commits so we never hold the row lock during I/O.
+const LOCK_EVENT_SQL = isPG
+  ? 'SELECT * FROM events WHERE id = ? FOR UPDATE'
+  : 'SELECT * FROM events WHERE id = ?';
+
 async function promoteNextWaitlist(eventId) {
-  const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
-  if (!ev) return null;
+  let done = null;
+  try {
+    done = await db.transaction(async (tx) => {
+      const ev = await tx.prepare(LOCK_EVENT_SQL).get(eventId);
+      if (!ev) return null;
 
-  const taken = (await db.prepare(
-    "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
-  ).get(eventId)).c;
-  if (Number(taken) >= Number(ev.capacity || EVENT_CAPACITY)) return null;
+      const taken = Number((await tx.prepare(
+        "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
+      ).get(eventId)).c);
+      if (taken >= Number(ev.capacity || EVENT_CAPACITY)) return null;
 
-  const entry = await db.prepare(
-    'SELECT * FROM waitlist WHERE event_id = ? ORDER BY created_at ASC, id ASC LIMIT 1'
-  ).get(eventId);
-  if (!entry) return null;
+      const entry = await tx.prepare(
+        'SELECT * FROM waitlist WHERE event_id = ? ORDER BY created_at ASC, id ASC LIMIT 1'
+      ).get(eventId);
+      if (!entry) return null;
 
-  const now = Date.now();
-  const fee = feeFor(ev, entry.reg_type);
-  const inserted = await db.prepare(
-    `INSERT INTO registrations
-       (event_id, user_id, reg_type, training_slot, fee_cents, payment_status,
-        status, created_at, updated_at)
-     VALUES (?, ?, ?, NULL, ?, 'unpaid', 'registered', ?, ?)`
-  ).run(eventId, entry.user_id, entry.reg_type, fee, now, now);
-  await db.prepare('DELETE FROM waitlist WHERE id = ?').run(entry.id);
+      const now = Date.now();
+      const fee = feeFor(ev, entry.reg_type);
+      const inserted = await tx.prepare(
+        `INSERT INTO registrations
+           (event_id, user_id, reg_type, training_slot, fee_cents, payment_status,
+            status, created_at, updated_at)
+         VALUES (?, ?, ?, NULL, ?, 'unpaid', 'registered', ?, ?)`
+      ).run(eventId, entry.user_id, entry.reg_type, fee, now, now);
+      await tx.prepare('DELETE FROM waitlist WHERE id = ?').run(entry.id);
 
+      return { ev, entry, fee, registrationId: inserted.lastInsertRowid };
+    });
+  } catch (e) {
+    // Losing a race (the spot was filled first, or a unique-constraint clash on
+    // a double-promote) is a benign outcome, not an error worth surfacing.
+    console.warn('Waitlist promotion skipped:', e.message);
+    return null;
+  }
+  if (!done) return null;
+
+  const { ev, entry, fee, registrationId } = done;
   const when = `${ev.event_date} · ${ev.start_time}-${ev.end_time}`;
   const place = ev.location ? ` · ${ev.location}` : '';
   const title = `Waitlist promoted: ${ev.title}`;
@@ -116,7 +144,7 @@ async function promoteNextWaitlist(eventId) {
 
   return {
     userId: entry.user_id,
-    registrationId: inserted.lastInsertRowid,
+    registrationId,
     emailSent: notification.emailSent === true,
   };
 }
@@ -170,6 +198,9 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   const ev = await db.prepare('SELECT * FROM events WHERE id = ?').get(req.params.id);
   if (!ev) return res.status(404).json({ error: 'Event not found' });
+  // Same window fields (starts_at_ms / cancel_deadline_ms / cancel_open) as
+  // the list endpoint, so clients can rely on either shape.
+  attachWindow(ev);
   res.json(ev);
 });
 
@@ -514,59 +545,78 @@ router.post('/:id/registrations', async (req, res) => {
     return res.status(400).json({ error: 'Training is not available for this event' });
   }
 
-  // Check existing registration
+  // Check existing registration (fast fail; re-checked under the transaction
+  // lock below, and the unique index is the final guard).
   const existing = await db.prepare('SELECT id FROM registrations WHERE event_id = ? AND user_id = ? AND status = \'registered\'').get(req.params.id, req.session.userId);
   if (existing) return res.status(409).json({ error: 'Already registered' });
 
   const now = Date.now();
 
-  // Event full (per-event capacity)? Queue the user instead of turning them away.
-  const regCount = (await db.prepare(
-    "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
-  ).get(req.params.id)).c;
-  const cap = Number(ev.capacity) || EVENT_CAPACITY;
-  if (Number(regCount) >= cap) {
-    const queued = await db.prepare('SELECT id FROM waitlist WHERE event_id = ? AND user_id = ?')
-      .get(req.params.id, req.session.userId);
-    if (queued) return res.status(409).json({ error: 'Already on the waitlist' });
-    await db.prepare(
-      'INSERT INTO waitlist (event_id, user_id, reg_type, created_at) VALUES (?, ?, ?, ?)'
-    ).run(req.params.id, req.session.userId, reg_type, now);
-    return res.json({ waitlisted: true });
-  }
-
-  // Partner validation
-  if (partner_user_id) {
-    const partner = await db.prepare('SELECT id FROM registrations WHERE event_id = ? AND user_id = ? AND status = \'registered\'').get(req.params.id, partner_user_id);
-    if (!partner) return res.status(400).json({ error: 'Partner not registered' });
-    const partnerHasPair = await db.prepare('SELECT id FROM registrations WHERE event_id = ? AND partner_user_id = ? AND status = \'registered\'').get(req.params.id, partner_user_id);
-    if (partnerHasPair) return res.status(400).json({ error: 'Partner already paired' });
-  }
-
-  const feeCents = feeFor(ev, reg_type);
-  let newId;
+  // The capacity re-check, waitlist insert and registration insert all run in
+  // one transaction that locks the event row, so two concurrent requests can
+  // never both see the last free spot and both take it (overbooking).
+  let outcome;
   try {
-    newId = await db.transaction(async (tx) => {
-      const result = await tx.prepare(
-        `INSERT INTO registrations (event_id, user_id, reg_type, training_slot, partner_user_id, sticky_pair,
-                                    status, fee_cents, payment_status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, 'registered', ?, 'unpaid', ?, ?)`
-      ).run(req.params.id, req.session.userId, reg_type, null,
-            partner_user_id || null, sticky_pair ? 1 : 0, feeCents, now, now);
+    outcome = await db.transaction(async (tx) => {
+    const evNow = await tx.prepare(LOCK_EVENT_SQL).get(req.params.id);
+    if (!evNow) return { code: 404, body: { error: 'Event not found' } };
 
-      // If partner specified, set their partner_user_id too
-      if (partner_user_id) {
-        await tx.prepare("UPDATE registrations SET partner_user_id = ?, sticky_pair = ?, updated_at = ? WHERE event_id = ? AND user_id = ? AND status = 'registered'")
-          .run(req.session.userId, sticky_pair ? 1 : 0, now, req.params.id, partner_user_id);
-      }
-      return result.lastInsertRowid;
+    const existingInTx = await tx.prepare(
+      "SELECT id FROM registrations WHERE event_id = ? AND user_id = ? AND status = 'registered'"
+    ).get(req.params.id, req.session.userId);
+    if (existingInTx) return { code: 409, body: { error: 'Already registered' } };
+
+    // Event full (per-event capacity)? Queue the user instead of turning them away.
+    const regCount = Number((await tx.prepare(
+      "SELECT COUNT(*) AS c FROM registrations WHERE event_id = ? AND status = 'registered'"
+    ).get(req.params.id)).c);
+    const cap = Number(evNow.capacity) || EVENT_CAPACITY;
+
+    if (regCount >= cap) {
+      const queued = await tx.prepare('SELECT id FROM waitlist WHERE event_id = ? AND user_id = ?')
+        .get(req.params.id, req.session.userId);
+      if (queued) return { code: 409, body: { error: 'Already on the waitlist' } };
+      await tx.prepare(
+        'INSERT INTO waitlist (event_id, user_id, reg_type, created_at) VALUES (?, ?, ?, ?)'
+      ).run(req.params.id, req.session.userId, reg_type, now);
+      return { code: 200, body: { waitlisted: true } };
+    }
+
+    // Partner validation (under the lock so a partner cancelling concurrently
+    // cannot slip between the check and the insert).
+    if (partner_user_id) {
+      const partner = await tx.prepare(
+        "SELECT id FROM registrations WHERE event_id = ? AND user_id = ? AND status = 'registered'"
+      ).get(req.params.id, partner_user_id);
+      if (!partner) return { code: 400, body: { error: 'Partner not registered' } };
+      const partnerHasPair = await tx.prepare(
+        "SELECT id FROM registrations WHERE event_id = ? AND partner_user_id = ? AND status = 'registered'"
+      ).get(req.params.id, partner_user_id);
+      if (partnerHasPair) return { code: 400, body: { error: 'Partner already paired' } };
+    }
+
+    const feeCents = feeFor(evNow, reg_type);
+    const result = await tx.prepare(
+      `INSERT INTO registrations (event_id, user_id, reg_type, training_slot, partner_user_id, sticky_pair,
+                                  status, fee_cents, payment_status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'registered', ?, 'unpaid', ?, ?)`
+    ).run(req.params.id, req.session.userId, reg_type, null,
+          partner_user_id || null, sticky_pair ? 1 : 0, feeCents, now, now);
+
+    // If partner specified, set their partner_user_id too
+    if (partner_user_id) {
+      await tx.prepare("UPDATE registrations SET partner_user_id = ?, sticky_pair = ?, updated_at = ? WHERE event_id = ? AND user_id = ? AND status = 'registered'")
+        .run(req.session.userId, sticky_pair ? 1 : 0, now, req.params.id, partner_user_id);
+    }
+    return { code: 200, body: { id: result.lastInsertRowid } };
     });
   } catch (e) {
     // UNIQUE / CHECK races (e.g. double-submit) — surface as clean JSON, not a 500 page.
     if (e && /constraint/i.test(e.message)) return res.status(409).json({ error: 'Already registered' });
     throw e;
   }
-  res.json({ id: newId });
+
+  res.status(outcome.code).json(outcome.body);
 });
 
 // DELETE /api/registrations/:id — cancel my own registration
@@ -679,7 +729,10 @@ registrationsRouter.get('/my', async (req, res) => {
 // POST /api/registrations/:id/payment-proof — upload a screenshot / receipt.
 // The image arrives as a data URL (already downscaled client-side) and is
 // stored in the DB so it survives restarts on hosts with ephemeral disks.
-registrationsRouter.post('/:id/payment-proof', async (req, res) => {
+// This route carries its own larger JSON limit: a 6 MiB image expands to just
+// over 8 MiB when base64-encoded, plus the JSON envelope. Every other API
+// route stays at the small global limit set in server.js.
+registrationsRouter.post('/:id/payment-proof', express.json({ limit: '9mb' }), async (req, res) => {
   if (!req.session.userId) return res.status(401).json({ error: 'Login required' });
   const reg = await db.prepare("SELECT * FROM registrations WHERE id = ? AND status = 'registered'").get(req.params.id);
   if (!reg) return res.status(404).json({ error: 'Registration not found' });
@@ -696,13 +749,18 @@ registrationsRouter.post('/:id/payment-proof', async (req, res) => {
   const approxBytes = Math.floor(m[2].length * 3 / 4);
   if (approxBytes > 6 * 1024 * 1024) return res.status(413).json({ error: 'Image too large (max 6MB)' });
 
+  // Prefer object storage (keeps the database small); fall back to storing
+  // the data URL in the DB when storage is not configured or the upload fails.
+  const mimeType = m[1] === 'image/jpg' ? 'image/jpeg' : m[1];
+  const stored = await uploadProof(Buffer.from(m[2], 'base64'), mimeType) || proof;
+
   const now = Date.now();
   await db.prepare(
     `UPDATE registrations
         SET payment_status = 'submitted', payment_proof = ?, payment_note = ?,
             payment_submitted_at = ?, updated_at = ?
       WHERE id = ?`
-  ).run(proof, String(note || '').slice(0, 300) || null, now, now, req.params.id);
+  ).run(stored, String(note || '').slice(0, 300) || null, now, now, req.params.id);
   res.json({ ok: true, status: 'submitted' });
 });
 
@@ -716,8 +774,17 @@ registrationsRouter.get('/:id/proof', async (req, res) => {
     return res.status(403).json({ error: 'Not allowed' });
   }
   if (!reg.payment_proof) return res.status(404).json({ error: 'No payment proof uploaded' });
+  let proofData = reg.payment_proof;
+  if (isStorageRef(proofData)) {
+    // Stored in Supabase Storage — resolve to a data URL so the frontend's
+    // existing <img src=...> handling keeps working unchanged.
+    proofData = await fetchProofAsDataUrl(proofData);
+    if (!proofData) {
+      return res.status(502).json({ error: 'Proof is in object storage but could not be fetched right now' });
+    }
+  }
   res.json({
-    proof: reg.payment_proof,
+    proof: proofData,
     status: reg.payment_status,
     note: reg.payment_note,
     submittedAt: reg.payment_submitted_at,

@@ -382,6 +382,15 @@ router.patch('/:id', requireLogin, async (req, res) => {
   }
 
   const now = Date.now();
+  // Pick the new value for a field: when the field was sent, use its value
+  // (null explicitly clears it); when it was NOT sent, KEEP the existing
+  // value. Passing null for untouched fields would silently wipe scores /
+  // winner / notes on partial updates.
+  function pick(value, existing, normalize) {
+    if (value === undefined) return existing;
+    if (value === null) return null;
+    return normalize ? normalize(value) : value;
+  }
   await db.prepare(
     `UPDATE matches SET
         match_date = COALESCE(?, match_date),
@@ -405,10 +414,10 @@ router.patch('/:id', requireLogin, async (req, res) => {
     team_a_p2_id != null ? a2 : null,
     team_b_p1_id != null ? b1 : null,
     team_b_p2_id != null ? b2 : null,
-    score_a !== undefined ? (score_a != null ? Number(score_a) : null) : null,
-    score_b !== undefined ? (score_b != null ? Number(score_b) : null) : null,
-    winner !== undefined ? winner || null : null,
-    notes !== undefined ? (notes ? String(notes).slice(0, 500) : null) : null,
+    pick(score_a, row.score_a, v => Number(v)),
+    pick(score_b, row.score_b, v => Number(v)),
+    pick(winner, row.winner),
+    pick(notes, row.notes, v => String(v).slice(0, 500)),
     status || null,
     req.session.userId,
     now,

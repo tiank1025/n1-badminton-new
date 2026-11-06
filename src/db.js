@@ -151,9 +151,17 @@ CREATE INDEX IF NOT EXISTS idx_app_sessions_expire ON app_sessions(expire);
 
 // ── Build the backend ───────────────────────────────────
 let db;
+let txQueue = Promise.resolve(); // SQLite-only: serialises async transactions
 
 if (isPG) {
-  const { Pool } = require('pg');
+  const { Pool, types } = require('pg');
+  // Postgres returns BIGINT (int8) columns as strings to avoid precision loss
+  // beyond Number.MAX_SAFE_INTEGER. Every int8 column in this schema is a
+  // millisecond timestamp or a count — all far below 2^53 — so parse them into
+  // real numbers. Otherwise JS comparisons like `reg.created_at < x` silently
+  // compare strings and JSON payloads carry quoted timestamps.
+  types.setTypeParser(types.builtins.INT8, (val) => (val === null ? null : Number(val)));
+
   const pool = new Pool({
     connectionString: DATABASE_URL,
     ssl: DATABASE_URL.includes('localhost') || DATABASE_URL.includes('127.0.0.1')
@@ -196,6 +204,7 @@ if (isPG) {
     prepare: makePrepare(pool),
     exec: async (sql) => { await pool.query(sql); },
     pool,
+    isPG: true,
     async transaction(fn) {
       const client = await pool.connect();
       try {
@@ -234,20 +243,29 @@ if (isPG) {
     prepare,
     exec: (sql) => sqlite.exec(sql),
     _raw: sqlite,
+    isPG: false,
     async transaction(fn) {
       // better-sqlite3's native db.transaction() requires a sync callback, but
       // our callback is async (uses await). Use manual BEGIN/COMMIT/ROLLBACK
       // on the single shared connection instead — equivalent for this app.
-      sqlite.exec('BEGIN');
-      try {
-        const tx = { prepare };
-        const result = await fn(tx);
-        sqlite.exec('COMMIT');
-        return result;
-      } catch (e) {
-        sqlite.exec('ROLLBACK');
-        throw e;
-      }
+      //
+      // Because the callback awaits, concurrent transactions would otherwise
+      // interleave on the shared connection ("cannot start a transaction
+      // within a transaction" / partial commits). A promise-queue mutex
+      // serialises them so each transaction runs to completion.
+      const run = () => {
+        sqlite.exec('BEGIN');
+        return Promise.resolve()
+          .then(() => fn({ prepare }))
+          .then(result => { sqlite.exec('COMMIT'); return result; })
+          .catch(e => {
+            try { sqlite.exec('ROLLBACK'); } catch (_) { /* already rolled back */ }
+            throw e;
+          });
+      };
+      const p = txQueue.then(run, run);
+      txQueue = p.catch(() => {}); // keep the chain alive after a failure
+      return p;
     },
   };
 }
@@ -369,8 +387,16 @@ async function seedAdmin() {
   const count = (await db.prepare('SELECT COUNT(*) AS c FROM users').get()).c;
   if (count > 0) return;
   const adminUser = process.env.BOOTSTRAP_ADMIN_USERNAME || 'admin';
-  const adminPass = process.env.BOOTSTRAP_ADMIN_PASSWORD || 'admin1234';
-  const { hash, salt } = hashPassword(adminPass);
+  const adminPass = process.env.BOOTSTRAP_ADMIN_PASSWORD;
+  if (!adminPass) {
+    // Never boot a production instance with a well-known admin password.
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('BOOTSTRAP_ADMIN_PASSWORD must be set in production (users table is empty)');
+    }
+    console.warn('  BOOTSTRAP_ADMIN_PASSWORD not set — using dev default admin1234 (never do this in production)');
+  }
+  const pass = adminPass || 'admin1234';
+  const { hash, salt } = hashPassword(pass);
   const now = Date.now();
   await db.prepare(
     `INSERT INTO users (username, password_hash, password_salt, display_name, level, is_admin, created_at, updated_at)
@@ -386,4 +412,4 @@ const dbReady = initSchema().then(migrate).then(seedAdmin).catch(err => {
   process.exit(1);
 });
 
-module.exports = { db, dbReady, hashPassword, verifyPassword };
+module.exports = { db, dbReady, hashPassword, verifyPassword, isPG };

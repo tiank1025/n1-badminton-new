@@ -1,8 +1,28 @@
 const { db, hashPassword, verifyPassword } = require('./db');
 const express = require('express');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 
 const LEVELS = ['advanced', 'intermediate', 'novice', 'beginner'];
+
+// ── Rate limiting ───────────────────────────────────────
+// Brute-force protection for credential endpoints. Keyed by IP (Render's
+// proxy is trusted via app.set('trust proxy', 1), so req.ip is the client).
+// Limits are env-overridable so the test suite can raise them.
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: Number(process.env.LOGIN_RATE_LIMIT_MAX) || 10,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many login attempts — try again in 15 minutes' },
+});
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: Number(process.env.REGISTER_RATE_LIMIT_MAX) || 20,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many signups from this address — try again later' },
+});
 
 // ── Middleware: require login ───────────────────────────
 function requireLogin(req, res, next) {
@@ -21,17 +41,21 @@ async function requireAdmin(req, res, next) {
 // ── Routes ──────────────────────────────────────────────
 
 // POST /api/auth/register
-router.post('/register', async (req, res) => {
+router.post('/register', registerLimiter, async (req, res) => {
   const { username, password, display_name, email, level } = req.body || {};
   const normalizedEmail = String(email || '').trim().toLowerCase();
-  if (!username || !password || !display_name || !normalizedEmail) {
+  const normalizedUsername = String(username || '').trim();
+  if (!normalizedUsername || !password || !display_name || !normalizedEmail) {
     return res.status(400).json({ error: 'username, password, display_name and email are required' });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) return res.status(400).json({ error: 'Invalid email address' });
-  if (password.length < 4) return res.status(400).json({ error: 'Password too short (min 4 chars)' });
+  if (password.length < 8) return res.status(400).json({ error: 'Password too short (min 8 chars)' });
+  if (normalizedUsername.length > 40 || String(display_name).trim().length > 40) {
+    return res.status(400).json({ error: 'Username and display name must be at most 40 characters' });
+  }
   if (!LEVELS.includes(level || 'novice')) return res.status(400).json({ error: 'Invalid level' });
 
-  const existing = await db.prepare('SELECT id FROM users WHERE username = ? OR display_name = ?').get(username, display_name);
+  const existing = await db.prepare('SELECT id FROM users WHERE username = ? OR display_name = ?').get(normalizedUsername, display_name);
   if (existing) return res.status(409).json({ error: 'Username or display name already taken' });
 
   const { hash, salt } = hashPassword(password);
@@ -39,14 +63,14 @@ router.post('/register', async (req, res) => {
   const result = await db.prepare(
     `INSERT INTO users (username, password_hash, password_salt, display_name, email, level, is_admin, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)`
-  ).run(username, hash, salt, display_name, normalizedEmail, level || 'novice', now, now);
+  ).run(normalizedUsername, hash, salt, display_name, normalizedEmail, level || 'novice', now, now);
 
   req.session.userId = result.lastInsertRowid;
-  res.json({ id: result.lastInsertRowid, username, display_name, email: normalizedEmail, level: level || 'novice', is_admin: 0 });
+  res.json({ id: result.lastInsertRowid, username: normalizedUsername, display_name, email: normalizedEmail, level: level || 'novice', is_admin: 0 });
 });
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) return res.status(400).json({ error: 'username and password required' });
 
@@ -56,8 +80,13 @@ router.post('/login', async (req, res) => {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
-  req.session.userId = user.id;
-  res.json({ id: user.id, username: user.username, display_name: user.display_name, level: user.level, is_admin: user.is_admin });
+  // Rotate the session ID on login so a session fixed before authentication
+  // (e.g. one an attacker planted) cannot be hijacked after login.
+  req.session.regenerate(err => {
+    if (err) return res.status(500).json({ error: 'Session error' });
+    req.session.userId = user.id;
+    res.json({ id: user.id, username: user.username, display_name: user.display_name, level: user.level, is_admin: user.is_admin });
+  });
 });
 
 // POST /api/auth/logout

@@ -1,9 +1,9 @@
 // notifications.js — in-app notifications + best-effort email delivery.
 //
 // In-app notifications always work (stored in the `notifications` table and
-// pushed over Socket.IO when the user is online). Email is optional: it only
-// sends when SMTP_HOST / SMTP_USER / SMTP_PASS are configured AND the user has
-// an email address on file. Without that setup the in-app copy is still created.
+// pushed over Socket.IO when the user is online). Email is optional: it uses
+// Resend's HTTPS API so it works on Render's free plan, where SMTP ports are
+// blocked. Without a Resend key the in-app copy is still created.
 
 const express = require('express');
 const { db } = require('./db');
@@ -15,54 +15,39 @@ const router = express.Router();
 let io = null;
 function setIo(_io) { io = _io; }
 
-// ── Email (optional) ────────────────────────────────────
-let transporter = null;
-// Pre-resolve the SMTP host with the system resolver. nodemailer's own
-// c-ares DNS (resolve4/6) can bypass VPN TUN DNS hijacking and time out on
-// hosts like smtp.gmail.com, while dns.lookup follows the OS routing and
-// works. Passing an IP also skips nodemailer's internal resolution entirely;
-// tls.servername keeps certificate validation against the real hostname.
-async function getTransporter() {
-  if (transporter !== null) return transporter;
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-  if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    console.warn('Email notification skipped: SMTP_HOST, SMTP_USER and SMTP_PASS must all be configured');
-    transporter = false;
-    return false;
-  }
-  let host = SMTP_HOST;
-  try {
-    const { address } = await require('node:dns').promises.lookup(SMTP_HOST, { family: 4 });
-    host = address;
-  } catch { /* fall back to the hostname */ }
-  const nodemailer = require('nodemailer');
-  transporter = nodemailer.createTransport({
-    host,
-    port: Number(SMTP_PORT) || 587,
-    secure: Number(SMTP_PORT) === 465,
-    auth: { user: SMTP_USER, pass: SMTP_PASS },
-    tls: { servername: SMTP_HOST },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
-  });
-  return transporter;
-}
-
-const MAIL_FROM = process.env.SMTP_FROM || 'N1 Badminton <no-reply@n1badminton.org>';
+// ── Email (optional, via Resend HTTPS API) ──────────────
+const RESEND_API_URL = 'https://api.resend.com/emails';
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+// Must be an address on a domain verified in the Resend account.
+const RESEND_FROM = process.env.RESEND_FROM;
 
 // A failed email must never undo the in-app notification or its triggering action.
 async function sendEmail(userId, subject, text) {
   try {
-    const t = await getTransporter();
-    if (!t) return false;
+    if (!RESEND_API_KEY || !RESEND_FROM) {
+      console.warn('Email notification skipped: RESEND_API_KEY and RESEND_FROM must both be configured');
+      return false;
+    }
     const user = await db.prepare('SELECT email, display_name FROM users WHERE id = ?').get(userId);
     if (!user?.email) {
       console.warn(`Email notification skipped: user ${userId} has no email address`);
       return false;
     }
-    const info = await t.sendMail({ from: MAIL_FROM, to: user.email, subject, text });
-    console.info(`Email notification accepted by SMTP for user ${userId} (message ${info.messageId})`);
+    const response = await fetch(RESEND_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ from: RESEND_FROM, to: [user.email], subject, text }),
+      signal: AbortSignal.timeout(15000),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      console.warn(`Email API rejected notification for user ${userId}:`, response.status, result.message || 'Unknown error');
+      return false;
+    }
+    console.info(`Email notification queued by Resend for user ${userId} (email ${result.id || 'unknown'})`);
     return true;
   } catch (e) {
     console.warn(`Email notification failed for user ${userId}:`, e.code || '', e.message);

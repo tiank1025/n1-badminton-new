@@ -34,17 +34,22 @@ services:
         sync: false
       - key: BOOTSTRAP_ADMIN_USERNAME
         value: admin
-      # Optional email alerts (currently sent when a waitlisted player is promoted).
-      # Set these in the Render dashboard to enable SMTP delivery.
-      - key: SMTP_HOST
+      # Optional email alerts via Resend's HTTPS API. Its sender domain must
+      # be verified in Resend before it can deliver to arbitrary recipients.
+      - key: RESEND_API_KEY
         sync: false
-      - key: SMTP_PORT
+      - key: RESEND_FROM
         sync: false
-      - key: SMTP_USER
+      # Optional object storage for payment proof images. When SUPABASE_URL
+      # and SUPABASE_SERVICE_ROLE_KEY are set (service role!), proofs are
+      # uploaded to the SUPABASE_STORAGE_BUCKET (default: payment-proofs —
+      # create it in Supabase) and the DB only keeps a short reference.
+      # Without them, proofs stay as base64 in the database.
+      - key: SUPABASE_URL
         sync: false
-      - key: SMTP_PASS
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: SMTP_FROM
-        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: payment-proofs
       - key: STATE_FILE
         value: /tmp/state.json

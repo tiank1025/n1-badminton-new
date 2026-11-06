@@ -5,6 +5,8 @@ require('dotenv').config();
 const express = require('express');
 const http = require('http');
 const path = require('path');
+const helmet = require('helmet');
+const compression = require('compression');
 const session = require('express-session');
 const { DatabaseSessionStore } = require('./src/session-store');
 const cookieParser = require('cookie-parser');
@@ -23,6 +25,14 @@ if (process.env.NODE_ENV === 'production' && !process.env.SESSION_SECRET) {
 // Render terminates HTTPS at its proxy and forwards the request to Node over
 // HTTP. Trust the proxy so express-session can issue secure cookies correctly.
 app.set('trust proxy', 1);
+
+// Security headers. The frontend pages rely heavily on inline <script> and
+// <style>, so a strict CSP is disabled for now; frameguard / nosniff / HSTS
+// (behind HTTPS) and the other defaults still apply.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+}));
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
@@ -42,15 +52,24 @@ const sessionMiddleware = session({
 });
 
 // ── Middleware ──────────────────────────────────────────
-// A 6 MiB image expands to just over 8 MiB when base64-encoded, plus the JSON
-// envelope. Leave enough room here for the route's explicit 6 MiB image cap.
-app.use(express.json({ limit: '9mb' }));
-app.use(express.urlencoded({ extended: true }));
+// JSON bodies are small (logins, registrations, scores). The one exception is
+// the payment-proof upload — its 6 MiB image cap gets its own generous limit
+// via express.json on that route (see events.js), so every other endpoint
+// rejects oversized bodies early instead of buffering 9 MB of JSON.
+app.use(express.json({ limit: '300kb' }));
+app.use(express.urlencoded({ extended: true, limit: '300kb' }));
+app.use(compression());
 app.use(cookieParser());
 app.use(sessionMiddleware);
 
-// Serve static files
-app.use(express.static(path.join(__dirname, 'public')));
+// Serve static files. Hash-free assets (i18n.js, common.css, images) get a
+// week of caching; HTML pages stay no-cache so deploys reach users instantly.
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '7d',
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 // ── REST API ────────────────────────────────────────────
 app.use('/api/auth', authRouter);
@@ -83,6 +102,19 @@ const io = new Server(server);
 initRealtime(io, sessionMiddleware, db);
 // Let notifications push to the player's room without a circular import.
 setIo(io);
+
+// ── Global error handler ────────────────────────────────
+// Must be registered last. Catches errors thrown in async route handlers
+// (Express 5 forwards rejected promises here) and returns structured JSON so
+// the frontend never receives an HTML error page from an API call.
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  console.error(`Unhandled error on ${req.method} ${req.originalUrl}:`, err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({
+    error: err.expose ? err.message : 'Internal server error',
+  });
+});
 
 // ── Start ───────────────────────────────────────────────
 // Wait for the DB schema + seed to finish before accepting requests.

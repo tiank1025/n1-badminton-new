@@ -174,7 +174,7 @@
     'Create Account': '创建账号',
     'Your username': '你的用户名',
     'Choose a username': '选择一个用户名',
-    'At least 4 characters': '至少 4 个字符',
+    'At least 8 characters': '至少 8 个字符',
     'Your name on the court board': '显示在球场板上的名字',
     // Shared navigation and page chrome
     'Live Board': '实时球板',
