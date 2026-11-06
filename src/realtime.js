@@ -400,10 +400,59 @@ function smartFillInto(targetPlayers) {
 
 // ── Module-level io reference (set in initRealtime) ────
 let io = null;
+// db handle captured in initRealtime; used by auto-record on end_game.
+let dbHandle = null;
+
+// ── Auto-record finished games ──────────────────────────
+// When a court game ends while an event is active, write it straight into
+// the matches table so every player's account history stays up to date
+// without an admin re-entering results manually. Board names are display
+// names; all four must resolve to distinct registered users (games that
+// include guest names cannot be attributed and are skipped). The admin who
+// ends the game becomes `recorded_by`. Returns the new match id or null.
+async function autoRecordMatch({ players, courtId, score, recordedBy }) {
+  const eventId = state.activeEventId;
+  if (!eventId || !Array.isArray(players) || players.length !== 4) return null;
+  if (!Number.isInteger(recordedBy)) return null;
+
+  const placeholders = players.map(() => '?').join(',');
+  const users = await dbHandle.prepare(
+    `SELECT id, display_name FROM users WHERE display_name IN (${placeholders})`
+  ).all(...players);
+  const idByName = Object.fromEntries(users.map(u => [u.display_name, u.id]));
+  const ids = players.map(n => idByName[n]);
+  if (ids.some(id => id == null) || new Set(ids).size !== 4) return null;
+
+  const ev = await dbHandle.prepare('SELECT id, event_date FROM events WHERE id = ?').get(eventId);
+  if (!ev) return null;
+
+  const now = Date.now();
+  const d = new Date(now);
+  const matchTime = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  const scoreA = score ? score.a : null;
+  const scoreB = score ? score.b : null;
+  // players arrive in team order (A1, A2, B1, B2) when a valid split was sent.
+  const winner = score ? (scoreA > scoreB ? 'A' : scoreB > scoreA ? 'B' : null) : null;
+  const result = await dbHandle.prepare(
+    `INSERT INTO matches (event_id, match_date, match_time,
+        team_a_p1_id, team_a_p2_id, team_b_p1_id, team_b_p2_id,
+        score_a, score_b, winner, notes, status,
+        recorded_by, recorded_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'recorded', ?, ?, ?)`
+  ).run(
+    ev.id, ev.event_date, matchTime,
+    ids[0], ids[1], ids[2], ids[3],
+    scoreA, scoreB, winner,
+    `Auto-recorded from live board (court ${courtId})`,
+    recordedBy, now, now,
+  );
+  return result.lastInsertRowid;
+}
 
 // ── Realtime init ───────────────────────────────────────
 function initRealtime(_io, sessionMiddleware, db) {
   io = _io;
+  dbHandle = db;
 
   // Server-authoritative training expiry sweep (also covers overdue slots
   // left over from a restart). unref() so it never keeps the process alive.
@@ -734,7 +783,7 @@ function initRealtime(_io, sessionMiddleware, db) {
       if (court && court.players.length === 4) { delete courtUndoSnapshots[courtId]; court.playing = true; broadcast(); }
     });
 
-    socket.on('end_game', ({ courtId, toQueue, score, teams }) => {
+    socket.on('end_game', async ({ courtId, toQueue, score, teams }) => {
       if (!socket.isAdmin) return;
       courtId = Number(courtId);
       const court = state.courts[courtId];
@@ -762,6 +811,23 @@ function initRealtime(_io, sessionMiddleware, db) {
         state.history.unshift(entry);
         if (state.history.length > 100) state.history.pop();
 
+        // Auto-record the finished game into each player's account history.
+        // The returned match id is kept in the undo snapshot so "Undo End"
+        // also voids the DB record. Guest-only games are skipped silently.
+        if (state.activeEventId) {
+          try {
+            const matchId = await autoRecordMatch({
+              players: ordered,
+              courtId,
+              score: entry.score || null,
+              recordedBy: socket.request.session && socket.request.session.userId,
+            });
+            if (matchId) snap.matchId = matchId;
+          } catch (e) {
+            console.warn('auto-record match failed:', e.message);
+          }
+        }
+
         // Casual (non-sticky) pairs that just finished a game TOGETHER are
         // auto-unbound now. Sticky pairs stay paired for the whole session.
         // The unbound pairs are saved in the undo snapshot so "Undo End" restores them.
@@ -781,7 +847,7 @@ function initRealtime(_io, sessionMiddleware, db) {
       broadcast();
     });
 
-    socket.on('undo_court_action', (courtId) => {
+    socket.on('undo_court_action', async (courtId) => {
       if (!socket.isAdmin) return;
       courtId = Number(courtId);
       const snap = courtUndoSnapshots[courtId];
@@ -800,6 +866,17 @@ function initRealtime(_io, sessionMiddleware, db) {
         (snap.pairsToRestore || []).forEach(([a, b]) => {
           if (!state.pairs[a] && !state.pairs[b]) { state.pairs[a] = b; state.pairs[b] = a; }
         });
+        // Undo also voids the auto-recorded match, if one was written.
+        if (snap.matchId) {
+          try {
+            await dbHandle.prepare(
+              `UPDATE matches SET status = 'cancelled', updated_by = ?, updated_at = ?
+               WHERE id = ? AND status = 'recorded'`
+            ).run(socket.request.session?.userId ?? null, Date.now(), snap.matchId);
+          } catch (e) {
+            console.warn('cancel auto-recorded match failed:', e.message);
+          }
+        }
       } else if (snap.type === 'promote') {
         if (court.playing) return;
         const snapSet = new Set(snap.players);

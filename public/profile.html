@@ -15,6 +15,16 @@
     .error { color:#b91c1c; min-height:18px; font-size:13px; margin-top:10px; }
     .success { color:var(--mg-700); min-height:18px; font-size:13px; margin-top:10px; }
     .profile-nav { display:flex; gap:14px; flex-wrap:wrap; padding:16px; }
+    .match-history { margin-top:8px; }
+    .match-item { border:1px solid var(--n-200); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
+    .match-meta { font-size:12px; color:var(--n-500); margin-bottom:6px; }
+    .match-line { display:flex; align-items:center; gap:10px; font-size:14px; flex-wrap:wrap; }
+    .match-score { font-weight:800; font-variant-numeric:tabular-nums; white-space:nowrap; }
+    .match-badge { font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; }
+    .match-badge.win  { color:#166534; background:#dcfce7; }
+    .match-badge.loss { color:#991b1b; background:#fee2e2; }
+    .match-badge.tbd  { color:var(--n-600); background:var(--n-100); }
+    .match-empty { color:var(--n-500); font-size:13px; }
   </style>
 </head>
 <body>
@@ -34,6 +44,11 @@
         <div class="error" id="error"></div><div class="success" id="success"></div>
         <button class="btn btn-primary btn-block" type="submit">Save changes</button>
       </form>
+    </section>
+    <section class="card" style="margin-top:18px">
+      <h2>My games · 我的对局</h2>
+      <p class="profile-help" style="margin:6px 0 12px">Games finished on the live board are recorded here automatically · 在 live board 结束的对局会自动记录到这里。</p>
+      <div id="match-history" class="match-history"><p class="match-empty">Loading… · 加载中…</p></div>
     </section>
   </main>
   <script>
@@ -63,7 +78,38 @@
       finally { button.disabled = false; }
     });
     $('logout').addEventListener('click', async e => { e.preventDefault(); await fetch('/api/auth/logout', {method:'POST'}); location.href='/login'; });
+
+    async function loadMatchHistory() {
+      const box = $('match-history');
+      try {
+        const r = await fetch('/api/matches/mine');
+        if (r.status === 401) { box.innerHTML = '<p class="match-empty">Log in to see your games · 登录后查看对局</p>'; return; }
+        const { matches } = await r.json();
+        if (!matches || !matches.length) {
+          box.innerHTML = '<p class="match-empty">No games recorded yet · 还没有对局记录</p>';
+          return;
+        }
+        const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        box.innerHTML = matches.map(m => {
+          const cls = m.did_win === true ? 'win' : m.did_win === false ? 'loss' : 'tbd';
+          const label = m.did_win === true ? 'Win' : m.did_win === false ? 'Loss' : '—';
+          const score = (m.score_a != null && m.score_b != null) ? `${m.score_a} : ${m.score_b}` : '';
+          return `<div class="match-item">
+            <div class="match-meta">${esc(m.event_title || '')} · ${esc(m.match_date)}</div>
+            <div class="match-line">
+              <span><b>${esc(m.teammate_name || '?')}</b> &amp; You</span>
+              <span class="match-badge ${cls}">${label}</span>
+              ${score ? `<span class="match-score">${score}</span>` : ''}
+              <span>vs ${esc(m.opponents.map(o => o.name).join(' &amp; '))}</span>
+            </div>
+          </div>`;
+        }).join('');
+      } catch {
+        box.innerHTML = '<p class="match-empty">Could not load games · 加载失败</p>';
+      }
+    }
     loadProfile();
+    loadMatchHistory();
   </script>
 </body>
 </html>

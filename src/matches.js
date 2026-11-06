@@ -132,6 +132,40 @@ router.get('/my-events', requireLogin, async (req, res) => {
   res.json(rows);
 });
 
+// GET /api/matches/mine — every match I played, newest first, with event
+// names and my perspective (teammate / opponents / win-loss) resolved.
+router.get('/mine', requireLogin, async (req, res) => {
+  const me = req.session.userId;
+  const rows = await db.prepare(
+    `SELECT * FROM matches
+      WHERE status = 'recorded'
+        AND (team_a_p1_id = ? OR team_a_p2_id = ? OR team_b_p1_id = ? OR team_b_p2_id = ?)
+      ORDER BY match_date DESC, match_time DESC, id DESC`
+  ).all(me, me, me, me);
+
+  const hydrated = await hydrateMatches(rows);
+  hydrated.forEach(m => {
+    const myTeam = [m.team_a_p1_id, m.team_a_p2_id].includes(me) ? 'A' : 'B';
+    m.my_team = myTeam;
+    m.did_win = m.winner ? m.winner === myTeam : null;
+    // Teammate = the other member of my team.
+    if (myTeam === 'A') {
+      m.teammate_name = m.team_a_p1_id === me ? m.team_a_p2_name : m.team_a_p1_name;
+      m.opponents = [
+        { id: m.team_b_p1_id, name: m.team_b_p1_name },
+        { id: m.team_b_p2_id, name: m.team_b_p2_name },
+      ];
+    } else {
+      m.teammate_name = m.team_b_p1_id === me ? m.team_b_p2_name : m.team_b_p1_name;
+      m.opponents = [
+        { id: m.team_a_p1_id, name: m.team_a_p1_name },
+        { id: m.team_a_p2_id, name: m.team_a_p2_name },
+      ];
+    }
+  });
+  res.json({ matches: hydrated });
+});
+
 // GET /api/matches/stats/me — current user's total record
 router.get('/stats/me', requireLogin, async (req, res) => {
   const me = req.session.userId;
